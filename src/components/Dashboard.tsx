@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { UserProfile, Quest, calculateLevel, xpForNextLevel, QuestStatus, QuestType } from "@/types";
+import { UserProfile, Quest, calculateLevel, xpForNextLevel, QuestStatus, QuestType, ThemeMode } from "@/types";
 import { db, auth } from "@/lib/firebase";
 import { collection, doc, getDoc, query, where, updateDoc, setDoc, onSnapshot, deleteDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -65,7 +65,20 @@ export default function Dashboard() {
   const [editName, setEditName] = useState("");
   const [editTimezone, setEditTimezone] = useState("");
   const [editNotifications, setEditNotifications] = useState(true);
+  const [editTheme, setEditTheme] = useState<ThemeMode>("light");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const applyTheme = (theme: ThemeMode) => {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.removeAttribute("data-theme");
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+      return;
+    }
+    if (theme === "ocean") {
+      document.documentElement.setAttribute("data-theme", "ocean");
+    }
+  };
 
   useEffect(() => {
     audioRef.current = new Audio(COMPLETION_SOUND_URL);
@@ -132,6 +145,9 @@ export default function Dashboard() {
       setEditName(data.displayName);
       setEditTimezone(data.settings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
       setEditNotifications(data.settings?.notificationsEnabled ?? true);
+      const theme = (data.settings?.theme || "light") as ThemeMode;
+      setEditTheme(theme);
+      applyTheme(theme);
     } else {
       const newProfile: UserProfile = {
         id: auth.currentUser.uid,
@@ -142,6 +158,7 @@ export default function Dashboard() {
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           notificationsEnabled: true,
           notifyBeforeDeadline: 30,
+          theme: "light",
         },
         createdAt: new Date().toISOString(),
         streakCount: 0,
@@ -150,8 +167,18 @@ export default function Dashboard() {
       setProfile(newProfile);
       setEditName(newProfile.displayName);
       setEditTimezone(newProfile.settings.timezone);
+      setEditTheme("light");
+      applyTheme("light");
     }
   };
+
+  useEffect(() => {
+    const cachedTheme = localStorage.getItem("growlyTheme") as ThemeMode | null;
+    if (cachedTheme) {
+      applyTheme(cachedTheme);
+      setEditTheme(cachedTheme);
+    }
+  }, []);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -275,14 +302,17 @@ export default function Dashboard() {
           ...profile.settings,
           timezone: editTimezone,
           notificationsEnabled: editNotifications,
+          theme: editTheme,
         },
         updatedAt: new Date().toISOString()
       });
+      localStorage.setItem("growlyTheme", editTheme);
+      applyTheme(editTheme);
       toast.success("Настройки сохранены!");
       setProfile(prev => prev ? { 
         ...prev, 
         displayName: editName,
-        settings: { ...prev.settings, timezone: editTimezone, notificationsEnabled: editNotifications }
+        settings: { ...prev.settings, timezone: editTimezone, notificationsEnabled: editNotifications, theme: editTheme }
       } : null);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
@@ -490,6 +520,25 @@ export default function Dashboard() {
                       <option value={Intl.DateTimeFormat().resolvedOptions().timeZone}>
                         {Intl.DateTimeFormat().resolvedOptions().timeZone} (Авто)
                       </option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Settings className="w-4 h-4" /> Тема
+                    </Label>
+                    <select
+                      value={editTheme}
+                      onChange={(e) => {
+                        const nextTheme = e.target.value as ThemeMode;
+                        setEditTheme(nextTheme);
+                        applyTheme(nextTheme);
+                      }}
+                      className="w-full h-12 rounded-xl border border-slate-200 bg-white px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="light">Светлая</option>
+                      <option value="dark">Темная</option>
+                      <option value="ocean">Ocean</option>
                     </select>
                   </div>
 

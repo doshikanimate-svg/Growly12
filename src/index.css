@@ -130,3 +130,53 @@
     @apply font-sans;
     }
 }
+
+/* Theme overrides for existing utility-heavy markup */
+html.dark .bg-slate-50 {
+  background-color: #0b1220 !important;
+}
+
+html.dark .bg-white {
+  background-color: #121a2b !important;
+}
+
+html.dark .text-slate-900,
+html.dark .text-slate-800 {
+  color: #f3f4f6 !important;
+}
+
+html.dark .text-slate-500,
+html.dark .text-slate-400,
+html.dark .text-slate-300 {
+  color: #a3adc2 !important;
+}
+
+html.dark .border-slate-100,
+html.dark .border-slate-200 {
+  border-color: #24324a !important;
+}
+
+html.dark .bg-slate-100 {
+  background-color: #1c2740 !important;
+}
+
+html.dark .bg-blue-50 {
+  background-color: #1a2742 !important;
+}
+
+html[data-theme="ocean"] .bg-slate-50 {
+  background-color: #eef8ff !important;
+}
+
+html[data-theme="ocean"] .bg-white {
+  background-color: #f7fcff !important;
+}
+
+html[data-theme="ocean"] .border-slate-100,
+html[data-theme="ocean"] .border-slate-200 {
+  border-color: #cde6f8 !important;
+}
+
+html[data-theme="ocean"] .bg-blue-600 {
+  background-color: #0e7490 !important;
+}

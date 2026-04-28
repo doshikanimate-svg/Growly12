@@ -22,10 +22,13 @@ export interface UserProfile {
     timezone: string;
     notificationsEnabled: boolean;
     notifyBeforeDeadline: number; // minutes
+    theme?: ThemeMode;
   };
   createdAt: string;
   updatedAt?: string;
 }
+
+export type ThemeMode = "light" | "dark" | "ocean";
 
 export interface Quest {
   id: string;

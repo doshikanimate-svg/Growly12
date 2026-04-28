@@ -1,0 +1,93 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a gamified profile for a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "displayName": { "type": "string" },
+        "xp": { "type": "integer" },
+        "level": { "type": "integer" },
+        "streakCount": { "type": "integer" },
+        "lastStreakUpdate": { "type": "string", "format": "date-time" },
+        "telegramId": { "type": "string" },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "timezone": { "type": "string" },
+            "notificationsEnabled": { "type": "boolean" },
+            "notifyBeforeDeadline": { "type": "integer" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "displayName", "xp", "level"]
+    },
+    "Quest": {
+      "title": "Quest",
+      "description": "A real-life quest created by the user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "xpReward": { "type": "integer" },
+        "type": { "type": "string", "enum": ["one-time", "daily", "weekly", "recurring"] },
+        "recurringDays": { "type": "array", "items": { "type": "integer" } },
+        "deadline": { "type": "string", "format": "date-time" },
+        "notifyAdvance": { "type": "integer" },
+        "status": { "type": "string", "enum": ["active", "completed", "expired"] },
+        "category": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "xpReward", "type", "status"]
+    },
+    "Achievement": {
+      "title": "Achievement",
+      "description": "A milestone reached by the user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "unlockedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title"]
+    },
+    "XPHistory": {
+      "title": "XP History Item",
+      "description": "XP gained at a specific time",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "xpGained": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "questTitle": { "type": "string" }
+      },
+      "required": ["id", "userId", "xpGained", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and stats."
+    },
+    "/users/{userId}/quests/{questId}": {
+      "schema": "Quest",
+      "description": "Quests for a specific user."
+    },
+    "/users/{userId}/xpHistory/{historyId}": {
+      "schema": "XPHistory",
+      "description": "Log of XP gains for visualization."
+    },
+    "/users/{userId}/achievements/{achievementId}": {
+      "schema": "Achievement",
+      "description": "Achievements for a specific user."
+    }
+  }
+}

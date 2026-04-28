@@ -1,0 +1,106 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitives & Helpers ---
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- User Profile ---
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.displayName is string && data.displayName.size() <= 50
+          && data.xp is int && data.xp >= 0
+          && data.level is int && data.level >= 1
+          && data.id == userId
+          && (!data.keys().contains('streakCount') || data.streakCount is int)
+          && (!data.keys().contains('lastStreakUpdate') || data.lastStreakUpdate is string);
+      }
+
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming()) 
+        && incoming().keys().hasAll(['id', 'displayName', 'xp', 'level', 'settings', 'createdAt']) 
+        && incoming().keys().size() >= 6;
+      
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        // Action: Gain XP / Level Up + Streak
+        (incoming().diff(existing()).affectedKeys().hasAny(['xp', 'level', 'streakCount', 'lastStreakUpdate', 'updatedAt']) && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['xp', 'level', 'streakCount', 'lastStreakUpdate', 'updatedAt']))
+        // Action: Settings
+        || (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'settings', 'updatedAt']))
+        // Action: Reset Streak
+        || (incoming().diff(existing()).affectedKeys().hasOnly(['streakCount', 'updatedAt']))
+      );
+
+      // --- Quests ---
+      match /quests/{questId} {
+        function isValidQuest(data) {
+          return data.title is string && data.title.size() <= 100
+            && data.xpReward is int && data.xpReward >= 0
+            && data.type in ['one-time', 'daily', 'weekly', 'recurring']
+            && data.status in ['active', 'completed', 'expired']
+            && data.userId == userId
+            && (!data.keys().contains('description') || data.description is string)
+            && (!data.keys().contains('category') || data.category is string);
+        }
+
+        // List access is secured by the parent user path
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId);
+        
+        allow create: if isOwner(userId) && isValidId(questId) && isValidQuest(incoming())
+          && incoming().keys().hasAll(['id', 'userId', 'title', 'xpReward', 'type', 'status', 'createdAt'])
+          && incoming().userId == request.auth.uid;
+        
+        allow update: if isOwner(userId) && isValidQuest(incoming()) && (
+          // Allow any update as long as it's the owner and schema is valid
+          // but strictly ensure userId remains immutable
+          incoming().userId == existing().userId
+        );
+        
+        allow delete: if isOwner(userId);
+      }
+
+      // --- Achievements ---
+      match /achievements/{achievementId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId);
+        allow create: if isOwner(userId) && incoming().userId == request.auth.uid;
+      }
+
+      // --- XP History ---
+      match /xpHistory/{historyId} {
+        function isValidXPHistory(data) {
+          return data.xpGained is int && data.xpGained >= 0
+            && data.timestamp is string
+            && data.userId == userId;
+        }
+
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(historyId) && isValidXPHistory(incoming());
+      }
+    }
+  }
+}

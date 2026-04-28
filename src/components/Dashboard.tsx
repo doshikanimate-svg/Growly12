@@ -155,7 +155,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!auth.currentUser) return;
-    fetchProfile();
+    fetchProfile().catch((error) => {
+      handleFirestoreError(error, OperationType.GET, `users/${auth.currentUser?.uid}`);
+      setLoading(false);
+    });
 
     const questsRef = collection(db, `users/${auth.currentUser.uid}/quests`);
     const historyRef = collection(db, `users/${auth.currentUser.uid}/xpHistory`);
@@ -168,6 +171,7 @@ export default function Dashboard() {
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `users/${auth.currentUser.uid}/quests`);
+      setLoading(false);
     });
 
     // Listen for XP history
@@ -175,6 +179,7 @@ export default function Dashboard() {
       setXpHistory(snapshot.docs.map(doc => doc.data()));
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `users/${auth.currentUser.uid}/xpHistory`);
+      setLoading(false);
     });
 
     return () => {

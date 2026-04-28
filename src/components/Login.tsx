@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { signIn } from "@/lib/firebase";
-import { LogIn, Sparkles } from "lucide-react";
+import { LogIn } from "lucide-react";
 import { motion } from "motion/react";
 
 export default function Login() {
@@ -15,11 +15,9 @@ export default function Login() {
         <Card className="w-full max-w-md border-none shadow-xl bg-white/80 backdrop-blur">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-200">
-                <Sparkles className="w-8 h-8 text-white" />
-              </div>
+              <img src="/growly-icon.svg" alt="Growly icon" className="w-16 h-16 rounded-2xl shadow-lg shadow-blue-200" />
             </div>
-            <CardTitle className="text-3xl font-bold tracking-tight text-slate-900">QuestLife</CardTitle>
+            <CardTitle className="text-3xl font-bold tracking-tight text-slate-900">Growly</CardTitle>
             <CardDescription className="text-slate-500 mt-2">
               Геймифицируй свою жизнь. Выполняй квесты, получай опыт и повышай уровень.
             </CardDescription>

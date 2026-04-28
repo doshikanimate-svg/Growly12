@@ -29,4 +29,4 @@ View your app in AI Studio: https://ai.studio/apps/36b3e15b-dfd5-4ca1-8723-d4c8c
 6. Frontend signs in to Firebase automatically with `signInWithCustomToken`.
 7. If an old Google profile with the same `telegramId` exists, backend auto-migrates profile, quests, and XP history into `tg_<telegramId>`.
 8. Optional: configure bot menu button via API:
-   `curl -X POST http://localhost:3000/api/telegram/setup-menu-button -H "Content-Type: application/json" -d '{"url":"https://your-public-domain","text":"Open QuestLife"}'`
+   `curl -X POST http://localhost:3000/api/telegram/setup-menu-button -H "Content-Type: application/json" -d '{"url":"https://your-public-domain","text":"Open Growly"}'`

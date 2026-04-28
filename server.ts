@@ -151,7 +151,7 @@ async function startServer() {
 
   // API Routes
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", message: "QuestLife Server is running" });
+    res.json({ status: "ok", message: "Growly Server is running" });
   });
 
   // Future Telegram Webhook placeholder
@@ -294,7 +294,7 @@ async function startServer() {
   app.post("/api/telegram/setup-menu-button", async (req, res) => {
     const botToken = process.env.BOT_TOKEN;
     const appUrl = req.body?.url || process.env.APP_URL;
-    const buttonText = req.body?.text || "Open QuestLife";
+    const buttonText = req.body?.text || "Open Growly";
 
     if (!botToken) {
       return res.status(500).json({ error: "Missing BOT_TOKEN in .env.local" });

@@ -34,8 +34,8 @@ service cloud.firestore {
           && data.xp is int && data.xp >= 0
           && data.level is int && data.level >= 1
           && data.id == userId
-          && (!data.keys().contains('streakCount') || data.streakCount is int)
-          && (!data.keys().contains('lastStreakUpdate') || data.lastStreakUpdate is string);
+          && (!data.keys().hasAny(['streakCount']) || data.streakCount is int)
+          && (!data.keys().hasAny(['lastStreakUpdate']) || data.lastStreakUpdate is string);
       }
 
       allow get: if isOwner(userId);
@@ -61,8 +61,8 @@ service cloud.firestore {
             && data.type in ['one-time', 'daily', 'weekly', 'recurring']
             && data.status in ['active', 'completed', 'expired']
             && data.userId == userId
-            && (!data.keys().contains('description') || data.description is string)
-            && (!data.keys().contains('category') || data.category is string);
+            && (!data.keys().hasAny(['description']) || data.description is string)
+            && (!data.keys().hasAny(['category']) || data.category is string);
         }
 
         // List access is secured by the parent user path

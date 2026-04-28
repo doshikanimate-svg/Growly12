@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { UserProfile, Quest, calculateLevel, xpForNextLevel, QuestStatus, QuestType, ThemeMode } from "@/types";
+import { UserProfile, Quest, calculateLevel, xpForNextLevel, QuestStatus, QuestType, ThemeMode, BadgeStyle, ProfileStyle } from "@/types";
 import { db, auth } from "@/lib/firebase";
 import { collection, doc, getDoc, query, where, updateDoc, setDoc, onSnapshot, deleteDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -66,6 +66,8 @@ export default function Dashboard() {
   const [editTimezone, setEditTimezone] = useState("");
   const [editNotifications, setEditNotifications] = useState(true);
   const [editTheme, setEditTheme] = useState<ThemeMode>("light");
+  const [editBadgeStyle, setEditBadgeStyle] = useState<BadgeStyle>("none");
+  const [editProfileStyle, setEditProfileStyle] = useState<ProfileStyle>("default");
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const applyTheme = (theme: ThemeMode) => {
@@ -147,6 +149,8 @@ export default function Dashboard() {
       setEditNotifications(data.settings?.notificationsEnabled ?? true);
       const theme = (data.settings?.theme || "light") as ThemeMode;
       setEditTheme(theme);
+      setEditBadgeStyle((data.settings?.badgeStyle || "none") as BadgeStyle);
+      setEditProfileStyle((data.settings?.profileStyle || "default") as ProfileStyle);
       applyTheme(theme);
     } else {
       const newProfile: UserProfile = {
@@ -159,6 +163,9 @@ export default function Dashboard() {
           notificationsEnabled: true,
           notifyBeforeDeadline: 30,
           theme: "light",
+          badgeStyle: "none",
+          profileStyle: "default",
+          premiumCosmeticsUnlocked: false,
         },
         createdAt: new Date().toISOString(),
         streakCount: 0,
@@ -168,6 +175,8 @@ export default function Dashboard() {
       setEditName(newProfile.displayName);
       setEditTimezone(newProfile.settings.timezone);
       setEditTheme("light");
+      setEditBadgeStyle("none");
+      setEditProfileStyle("default");
       applyTheme("light");
     }
   };
@@ -295,6 +304,16 @@ export default function Dashboard() {
   const saveSettings = async () => {
     if (!auth.currentUser || !profile) return;
     try {
+      const premiumCosmeticsUnlocked = profile.settings?.premiumCosmeticsUnlocked ?? false;
+      const safeBadgeStyle: BadgeStyle =
+        !premiumCosmeticsUnlocked && (editBadgeStyle === "gold" || editBadgeStyle === "crown")
+          ? "silver"
+          : editBadgeStyle;
+      const safeProfileStyle: ProfileStyle =
+        !premiumCosmeticsUnlocked && editProfileStyle === "neon"
+          ? "glass"
+          : editProfileStyle;
+
       const userRef = doc(db, "users", auth.currentUser.uid);
       await updateDoc(userRef, {
         displayName: editName,
@@ -303,6 +322,8 @@ export default function Dashboard() {
           timezone: editTimezone,
           notificationsEnabled: editNotifications,
           theme: editTheme,
+          badgeStyle: safeBadgeStyle,
+          profileStyle: safeProfileStyle,
         },
         updatedAt: new Date().toISOString()
       });
@@ -312,8 +333,17 @@ export default function Dashboard() {
       setProfile(prev => prev ? { 
         ...prev, 
         displayName: editName,
-        settings: { ...prev.settings, timezone: editTimezone, notificationsEnabled: editNotifications, theme: editTheme }
+        settings: { 
+          ...prev.settings, 
+          timezone: editTimezone, 
+          notificationsEnabled: editNotifications, 
+          theme: editTheme,
+          badgeStyle: safeBadgeStyle,
+          profileStyle: safeProfileStyle,
+        }
       } : null);
+      setEditBadgeStyle(safeBadgeStyle);
+      setEditProfileStyle(safeProfileStyle);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
     }
@@ -332,6 +362,23 @@ export default function Dashboard() {
   const nextLvlXp = profile ? xpForNextLevel(profile.level) : 100;
   const currentLvlXp = profile ? xpForNextLevel(profile.level - 1) : 0;
   const progress = profile ? ((profile.xp - currentLvlXp) / (nextLvlXp - currentLvlXp)) * 100 : 0;
+  const badgeStyle = (profile?.settings?.badgeStyle || "none") as BadgeStyle;
+  const profileStyle = (profile?.settings?.profileStyle || "default") as ProfileStyle;
+  const premiumCosmeticsUnlocked = profile?.settings?.premiumCosmeticsUnlocked ?? false;
+
+  const badgeView: Record<Exclude<BadgeStyle, "none">, { label: string; className: string }> = {
+    bronze: { label: "Bronze", className: "bg-amber-700/20 text-amber-100 border-amber-500/40" },
+    silver: { label: "Silver", className: "bg-slate-200/20 text-slate-100 border-slate-300/50" },
+    gold: { label: "Gold", className: "bg-yellow-400/20 text-yellow-100 border-yellow-300/50" },
+    crown: { label: "Crown", className: "bg-fuchsia-500/20 text-fuchsia-100 border-fuchsia-300/50" },
+  };
+
+  const profileHeaderStyleClass =
+    profileStyle === "glass"
+      ? "bg-gradient-to-r from-cyan-500 to-blue-600 border border-white/30 shadow-2xl"
+      : profileStyle === "neon"
+        ? "bg-gradient-to-r from-indigo-600 to-cyan-500 ring-2 ring-cyan-300/50 shadow-[0_0_30px_rgba(34,211,238,0.35)]"
+        : "bg-blue-600";
 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Загрузка приключения...</div>;
 
@@ -339,12 +386,19 @@ export default function Dashboard() {
     <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
       <Tabs defaultValue="quests" className="flex-1 flex flex-col overflow-hidden">
         {/* Fixed Top Header */}
-        <header className="w-full bg-blue-600 text-white pt-6 pb-8 px-4 rounded-b-[2.5rem] shadow-xl relative z-20 shrink-0">
+        <header className={`w-full text-white pt-6 pb-8 px-4 rounded-b-[2.5rem] shadow-xl relative z-20 shrink-0 ${profileHeaderStyleClass}`}>
           <div className="max-w-2xl mx-auto space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <p className="text-blue-200 text-[10px] font-black uppercase tracking-[0.2em] opacity-70">Личный профиль</p>
-                  <h1 className="text-2xl font-black tracking-tight leading-none">{profile?.displayName}</h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl font-black tracking-tight leading-none">{profile?.displayName}</h1>
+                    {badgeStyle !== "none" && (
+                      <span className={`text-[10px] uppercase font-black px-2.5 py-1 rounded-full border ${badgeView[badgeStyle].className}`}>
+                        {badgeView[badgeStyle].label}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   {profile && profile.streakCount > 0 && (
@@ -540,6 +594,44 @@ export default function Dashboard() {
                       <option value="dark">Темная</option>
                       <option value="ocean">Ocean</option>
                     </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Award className="w-4 h-4" /> Бейдж профиля
+                    </Label>
+                    <select
+                      value={editBadgeStyle}
+                      onChange={(e) => setEditBadgeStyle(e.target.value as BadgeStyle)}
+                      className="w-full h-12 rounded-xl border border-slate-200 bg-white px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="none">Без бейджа</option>
+                      <option value="bronze">Bronze</option>
+                      <option value="silver">Silver</option>
+                      <option value="gold">Gold (Premium)</option>
+                      <option value="crown">Crown (Premium)</option>
+                    </select>
+                    {!premiumCosmeticsUnlocked && (
+                      <p className="text-xs text-slate-500">Gold и Crown доступны по подписке.</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <User className="w-4 h-4" /> Стиль профиля
+                    </Label>
+                    <select
+                      value={editProfileStyle}
+                      onChange={(e) => setEditProfileStyle(e.target.value as ProfileStyle)}
+                      className="w-full h-12 rounded-xl border border-slate-200 bg-white px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="default">Default</option>
+                      <option value="glass">Glass</option>
+                      <option value="neon">Neon (Premium)</option>
+                    </select>
+                    {!premiumCosmeticsUnlocked && (
+                      <p className="text-xs text-slate-500">Neon доступен по подписке.</p>
+                    )}
                   </div>
 
                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">

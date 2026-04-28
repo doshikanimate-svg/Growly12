@@ -23,12 +23,17 @@ export interface UserProfile {
     notificationsEnabled: boolean;
     notifyBeforeDeadline: number; // minutes
     theme?: ThemeMode;
+    badgeStyle?: BadgeStyle;
+    profileStyle?: ProfileStyle;
+    premiumCosmeticsUnlocked?: boolean;
   };
   createdAt: string;
   updatedAt?: string;
 }
 
 export type ThemeMode = "light" | "dark" | "ocean";
+export type BadgeStyle = "none" | "bronze" | "silver" | "gold" | "crown";
+export type ProfileStyle = "default" | "glass" | "neon";
 
 export interface Quest {
   id: string;

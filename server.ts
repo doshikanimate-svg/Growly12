@@ -92,6 +92,11 @@ function ensureFirebaseAdmin() {
   });
 }
 
+function getAdminDb() {
+  const databaseId = process.env.FIRESTORE_DATABASE_ID;
+  return databaseId ? getFirestore(undefined, databaseId) : getFirestore();
+}
+
 async function setTelegramMenuButton(botToken: string, text: string, url: string) {
   const response = await fetch(`https://api.telegram.org/bot${botToken}/setChatMenuButton`, {
     method: "POST",
@@ -146,7 +151,7 @@ async function answerTelegramPreCheckoutQuery(botToken: string, preCheckoutQuery
 
 async function activateSubscriptionForTelegramUser(telegramUserId: number, durationDays: number) {
   ensureFirebaseAdmin();
-  const db = getFirestore();
+  const db = getAdminDb();
   const uid = `tg_${telegramUserId}`;
   const userRef = db.collection("users").doc(uid);
   const userSnap = await userRef.get();
@@ -217,7 +222,7 @@ function validateTelegramInitDataOrThrow(initData: string, botToken: string) {
 }
 
 async function copySubcollectionIfMissing(sourceUid: string, targetUid: string, subcollection: string) {
-  const db = getFirestore();
+  const db = getAdminDb();
   const sourceRef = db.collection("users").doc(sourceUid).collection(subcollection);
   const targetRef = db.collection("users").doc(targetUid).collection(subcollection);
 
@@ -373,7 +378,7 @@ async function startServer() {
 
     try {
       ensureFirebaseAdmin();
-      const db = getFirestore();
+      const db = getAdminDb();
       const usersRef = db.collection("users");
       const targetRef = usersRef.doc(targetUid);
       const sourceQuery = await usersRef.where("telegramId", "==", String(tgUser.id)).get();
@@ -517,7 +522,7 @@ async function startServer() {
     try {
       const tgUser = validateTelegramInitDataOrThrow(initData, botToken);
       ensureFirebaseAdmin();
-      const db = getFirestore();
+      const db = getAdminDb();
       const uid = `tg_${tgUser.id}`;
       const requestsRef = db.collection("subscriptionRequests");
 
@@ -557,7 +562,7 @@ async function startServer() {
     try {
       const tgUser = validateTelegramInitDataOrThrow(initData, botToken);
       ensureFirebaseAdmin();
-      const db = getFirestore();
+      const db = getAdminDb();
       const uid = `tg_${tgUser.id}`;
       const sameUser = await db.collection("subscriptionRequests").where("uid", "==", uid).get();
       const pending = sameUser.docs
@@ -583,7 +588,7 @@ async function startServer() {
       if (!adminIds.has(String(tgUser.id))) return res.status(403).json({ error: "Admin access required" });
 
       ensureFirebaseAdmin();
-      const db = getFirestore();
+      const db = getAdminDb();
       const snapshot = await db.collection("subscriptionRequests").where("status", "==", "pending").get();
       const requests = snapshot.docs
         .map((d) => d.data())
@@ -609,7 +614,7 @@ async function startServer() {
       if (!adminIds.has(String(tgUser.id))) return res.status(403).json({ error: "Admin access required" });
 
       ensureFirebaseAdmin();
-      const db = getFirestore();
+      const db = getAdminDb();
       const requestRef = db.collection("subscriptionRequests").doc(requestId);
       const requestSnap = await requestRef.get();
       if (!requestSnap.exists) return res.status(404).json({ error: "Request not found" });
@@ -647,7 +652,7 @@ async function startServer() {
       if (!adminIds.has(String(tgUser.id))) return res.status(403).json({ error: "Admin access required" });
 
       ensureFirebaseAdmin();
-      await getFirestore().collection("subscriptionRequests").doc(requestId).set({
+      await getAdminDb().collection("subscriptionRequests").doc(requestId).set({
         status: "rejected",
         reason: String(reason),
         processedAt: new Date().toISOString(),

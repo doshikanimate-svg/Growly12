@@ -431,9 +431,22 @@ export default function Dashboard() {
         body: JSON.stringify({ initData: webApp.initData, plan: subscriptionPlanChoice }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.error || "Не удалось отправить заявку");
-      toast.success("Заявка отправлена. Напишите в личку и отправьте чек.");
-      await fetchMyPendingManualRequest();
+      if (!response.ok && response.status !== 409) {
+        throw new Error(payload?.error || "Не удалось отправить заявку");
+      }
+      if (response.ok) {
+        toast.success("Заявка отправлена. Сейчас откроем личку для оплаты.");
+        await fetchMyPendingManualRequest();
+      } else {
+        toast.message("Заявка уже есть. Открываю личку для оплаты.");
+      }
+
+      const supportLink = "https://t.me/OwOk0";
+      if (webApp.openTelegramLink) {
+        webApp.openTelegramLink(supportLink);
+      } else {
+        window.open(supportLink, "_blank");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Ошибка заявки");
     } finally {

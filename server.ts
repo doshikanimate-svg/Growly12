@@ -113,6 +113,62 @@ async function setTelegramMenuButton(botToken: string, text: string, url: string
   return payload;
 }
 
+async function createTelegramInvoiceLink(botToken: string, payload: Record<string, unknown>) {
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const result = await response.json();
+  if (!response.ok || !result?.ok || !result?.result) {
+    throw new Error(result?.description || "Failed to create invoice link");
+  }
+
+  return result.result as string;
+}
+
+async function answerTelegramPreCheckoutQuery(botToken: string, preCheckoutQueryId: string, ok: boolean, errorMessage?: string) {
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/answerPreCheckoutQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      pre_checkout_query_id: preCheckoutQueryId,
+      ok,
+      error_message: errorMessage,
+    }),
+  });
+  const result = await response.json();
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.description || "Failed to answer pre-checkout query");
+  }
+}
+
+async function activateSubscriptionForTelegramUser(telegramUserId: number, durationDays: number) {
+  ensureFirebaseAdmin();
+  const db = getFirestore();
+  const uid = `tg_${telegramUserId}`;
+  const userRef = db.collection("users").doc(uid);
+  const userSnap = await userRef.get();
+
+  const now = new Date();
+  const currentUntilRaw = userSnap.data()?.settings?.subscriptionUntil;
+  const currentUntil = currentUntilRaw ? new Date(currentUntilRaw) : null;
+  const baseDate = currentUntil && currentUntil > now ? currentUntil : now;
+  const nextUntil = new Date(baseDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
+
+  await userRef.set({
+    id: uid,
+    telegramId: String(telegramUserId),
+    settings: {
+      premiumCosmeticsUnlocked: true,
+      subscriptionPlan: "pro",
+      subscriptionUntil: nextUntil.toISOString(),
+    },
+    updatedAt: new Date().toISOString(),
+  }, { merge: true });
+}
+
 async function copySubcollectionIfMissing(sourceUid: string, targetUid: string, subcollection: string) {
   const db = getFirestore();
   const sourceRef = db.collection("users").doc(sourceUid).collection(subcollection);
@@ -154,10 +210,27 @@ async function startServer() {
     res.json({ status: "ok", message: "Growly Server is running" });
   });
 
-  // Future Telegram Webhook placeholder
-  app.post("/api/telegram-webhook", (req, res) => {
-    console.log("Telegram Webhook received:", req.body);
-    res.sendStatus(200);
+  app.post("/api/telegram-webhook", async (req, res) => {
+    try {
+      const update = req.body;
+      const preCheckoutQuery = update?.pre_checkout_query;
+      const message = update?.message;
+      const successfulPayment = message?.successful_payment;
+      const telegramUserId = message?.from?.id;
+
+      if (preCheckoutQuery?.id) {
+        await answerTelegramPreCheckoutQuery(botTokenFromEnv(), preCheckoutQuery.id, true);
+      }
+
+      if (successfulPayment && telegramUserId) {
+        const durationDays = Number(process.env.TELEGRAM_SUBSCRIPTION_DAYS || "30");
+        await activateSubscriptionForTelegramUser(Number(telegramUserId), durationDays);
+      }
+      res.sendStatus(200);
+    } catch (error) {
+      console.error("Telegram webhook processing error:", error);
+      res.sendStatus(200);
+    }
   });
 
   app.post("/api/telegram/validate", (req, res) => {
@@ -314,6 +387,74 @@ async function startServer() {
       return res.status(500).json({ error: message });
     }
   });
+
+  app.post("/api/telegram/subscription/create-invoice", async (req, res) => {
+    const initData = req.body?.initData;
+    const botToken = process.env.BOT_TOKEN;
+    const providerToken = process.env.TELEGRAM_PROVIDER_TOKEN || "";
+    const paymentMode = (process.env.TELEGRAM_PAYMENT_MODE || "stars").toLowerCase();
+    const starsAmount = Number(process.env.TELEGRAM_SUBSCRIPTION_PRICE_STARS || "199");
+    const rubAmountKopecs = Number(process.env.TELEGRAM_SUBSCRIPTION_PRICE_RUB_KOPECS || "19900");
+    const durationDays = Number(process.env.TELEGRAM_SUBSCRIPTION_DAYS || "30");
+
+    if (!botToken) {
+      return res.status(500).json({ error: "Missing BOT_TOKEN in .env.local" });
+    }
+    if (!initData || typeof initData !== "string") {
+      return res.status(400).json({ error: "initData is required" });
+    }
+    if (!verifyTelegramInitData(initData, botToken) || !isTelegramAuthFresh(initData)) {
+      return res.status(401).json({ error: "Invalid or expired Telegram initData" });
+    }
+    const tgUser = getTelegramUserFromInitData(initData);
+    if (!tgUser?.id) {
+      return res.status(400).json({ error: "Telegram user not found in initData" });
+    }
+
+    try {
+      const commonPayload = {
+        title: "Growly Pro",
+        description: `Подписка Growly Pro на ${durationDays} дней`,
+        payload: `growly_pro_${tgUser.id}_${Date.now()}`,
+      };
+
+      const invoicePayload = paymentMode === "yookassa"
+        ? {
+            ...commonPayload,
+            provider_token: providerToken,
+            currency: "RUB",
+            prices: [{ label: `Growly Pro ${durationDays}d`, amount: rubAmountKopecs }],
+          }
+        : {
+            ...commonPayload,
+            provider_token: "",
+            currency: "XTR",
+            prices: [{ label: `Growly Pro ${durationDays}d`, amount: starsAmount }],
+            subscription_period: 2592000,
+          };
+
+      if (paymentMode === "yookassa" && !providerToken) {
+        return res.status(500).json({ error: "Missing TELEGRAM_PROVIDER_TOKEN for YooKassa mode" });
+      }
+
+      const invoiceLink = await createTelegramInvoiceLink(botToken, invoicePayload);
+      return res.json({
+        ok: true,
+        invoiceLink,
+        durationDays,
+        paymentMode,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({ error: message });
+    }
+  });
+
+  function botTokenFromEnv() {
+    const token = process.env.BOT_TOKEN;
+    if (!token) throw new Error("Missing BOT_TOKEN in .env.local");
+    return token;
+  }
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

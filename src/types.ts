@@ -26,6 +26,8 @@ export interface UserProfile {
     badgeStyle?: BadgeStyle;
     profileStyle?: ProfileStyle;
     premiumCosmeticsUnlocked?: boolean;
+    subscriptionPlan?: "free" | "pro";
+    subscriptionUntil?: string;
   };
   createdAt: string;
   updatedAt?: string;

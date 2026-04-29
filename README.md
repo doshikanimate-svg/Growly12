@@ -30,3 +30,14 @@ View your app in AI Studio: https://ai.studio/apps/36b3e15b-dfd5-4ca1-8723-d4c8c
 7. If an old Google profile with the same `telegramId` exists, backend auto-migrates profile, quests, and XP history into `tg_<telegramId>`.
 8. Optional: configure bot menu button via API:
    `curl -X POST http://localhost:3000/api/telegram/setup-menu-button -H "Content-Type: application/json" -d '{"url":"https://your-public-domain","text":"Open Growly"}'`
+
+## Telegram subscription payments (Growly Pro)
+
+1. Set in `.env.local`:
+   - `TELEGRAM_PROVIDER_TOKEN`
+   - `TELEGRAM_SUBSCRIPTION_PRICE_STARS`
+   - `TELEGRAM_SUBSCRIPTION_DAYS`
+2. Set Telegram webhook to your backend:
+   `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=https://your-public-domain/api/telegram-webhook`
+3. In Mini App settings, users can click "Купить подписку".
+4. After successful payment, webhook activates premium cosmetics for `tg_<telegramId>`.

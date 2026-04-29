@@ -47,6 +47,7 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
 import { addDoc } from "firebase/firestore";
 import confetti from "canvas-confetti";
+import { initTelegramWebApp } from "@/lib/telegram";
 
 const COMPLETION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3";
 
@@ -68,6 +69,7 @@ export default function Dashboard() {
   const [editTheme, setEditTheme] = useState<ThemeMode>("light");
   const [editBadgeStyle, setEditBadgeStyle] = useState<BadgeStyle>("none");
   const [editProfileStyle, setEditProfileStyle] = useState<ProfileStyle>("default");
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const applyTheme = (theme: ThemeMode) => {
@@ -359,12 +361,55 @@ export default function Dashboard() {
     }
   };
 
+  const purchaseSubscription = async () => {
+    const webApp = initTelegramWebApp();
+    if (!webApp?.initData) {
+      toast.error("Покупка доступна только в Telegram Mini App");
+      return;
+    }
+
+    try {
+      setPurchaseLoading(true);
+      const response = await fetch("/api/telegram/subscription/create-invoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: webApp.initData }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.invoiceLink) {
+        throw new Error(payload?.error || "Не удалось создать счет");
+      }
+
+      if (webApp.openInvoice) {
+        webApp.openInvoice(payload.invoiceLink, (status) => {
+          if (status === "paid") {
+            toast.success("Подписка активирована!");
+            fetchProfile().catch(() => null);
+          } else if (status === "cancelled") {
+            toast.message("Покупка отменена");
+          } else if (status === "failed") {
+            toast.error("Платеж не прошел");
+          }
+        });
+      } else {
+        window.open(payload.invoiceLink, "_blank");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Ошибка покупки");
+    } finally {
+      setPurchaseLoading(false);
+    }
+  };
+
   const nextLvlXp = profile ? xpForNextLevel(profile.level) : 100;
   const currentLvlXp = profile ? xpForNextLevel(profile.level - 1) : 0;
   const progress = profile ? ((profile.xp - currentLvlXp) / (nextLvlXp - currentLvlXp)) * 100 : 0;
   const badgeStyle = (profile?.settings?.badgeStyle || "none") as BadgeStyle;
   const profileStyle = (profile?.settings?.profileStyle || "default") as ProfileStyle;
   const premiumCosmeticsUnlocked = profile?.settings?.premiumCosmeticsUnlocked ?? false;
+  const subscriptionUntil = profile?.settings?.subscriptionUntil;
+  const subscriptionPlan = profile?.settings?.subscriptionPlan || "free";
+  const subscriptionActive = !!subscriptionUntil && new Date(subscriptionUntil) > new Date();
 
   const badgeView: Record<Exclude<BadgeStyle, "none">, { label: string; className: string }> = {
     bronze: { label: "Bronze", className: "bg-amber-700/20 text-amber-100 border-amber-500/40" },
@@ -614,6 +659,28 @@ export default function Dashboard() {
                     {!premiumCosmeticsUnlocked && (
                       <p className="text-xs text-slate-500">Gold и Crown доступны по подписке.</p>
                     )}
+                  </div>
+
+                  <div className="space-y-3 p-4 bg-slate-50 rounded-2xl">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">Подписка Growly Pro</p>
+                        <p className="text-xs text-slate-500">
+                          {subscriptionActive
+                            ? `Активна до ${new Date(subscriptionUntil!).toLocaleDateString()}`
+                            : "Не активна"}
+                        </p>
+                      </div>
+                      <span className="text-xs font-bold uppercase text-slate-500">{subscriptionPlan}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={purchaseSubscription}
+                      disabled={purchaseLoading}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-11 font-semibold"
+                    >
+                      {purchaseLoading ? "Создаем счет..." : subscriptionActive ? "Продлить подписку" : "Купить подписку"}
+                    </Button>
                   </div>
 
                   <div className="space-y-2">

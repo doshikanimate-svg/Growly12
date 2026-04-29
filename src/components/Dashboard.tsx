@@ -805,7 +805,7 @@ export default function Dashboard() {
                       {manualRequestLoading ? "Отправляем заявку..." : pendingManualRequest ? "Заявка уже на проверке" : "Оплатить через личку"}
                     </Button>
                     <p className="text-xs text-slate-500">
-                      Для оплаты в личке напишите @your_username и отправьте чек. Затем дождитесь подтверждения.
+                      Для оплаты в личке напишите @OwOk0 и отправьте чек. Затем дождитесь подтверждения.
                     </p>
                     {pendingManualRequest && (
                       <p className="text-xs text-amber-600">

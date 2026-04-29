@@ -52,6 +52,17 @@ import { initTelegramWebApp } from "@/lib/telegram";
 const COMPLETION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3";
 
 export default function Dashboard() {
+  type ManualSubscriptionRequest = {
+    id: string;
+    telegramId: string;
+    plan: "month" | "half_year" | "year";
+    amountExpected: number;
+    currency: string;
+    durationDays: number;
+    status: "pending" | "approved" | "rejected";
+    createdAt: string;
+  };
+
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [quests, setQuests] = useState<Quest[]>([]);
   const [xpHistory, setXpHistory] = useState<any[]>([]);
@@ -70,6 +81,11 @@ export default function Dashboard() {
   const [editBadgeStyle, setEditBadgeStyle] = useState<BadgeStyle>("none");
   const [editProfileStyle, setEditProfileStyle] = useState<ProfileStyle>("default");
   const [purchaseLoading, setPurchaseLoading] = useState(false);
+  const [subscriptionPlanChoice, setSubscriptionPlanChoice] = useState<"month" | "half_year" | "year">("month");
+  const [manualRequestLoading, setManualRequestLoading] = useState(false);
+  const [pendingManualRequest, setPendingManualRequest] = useState<ManualSubscriptionRequest | null>(null);
+  const [adminRequests, setAdminRequests] = useState<ManualSubscriptionRequest[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const applyTheme = (theme: ThemeMode) => {
@@ -373,7 +389,7 @@ export default function Dashboard() {
       const response = await fetch("/api/telegram/subscription/create-invoice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ initData: webApp.initData }),
+        body: JSON.stringify({ initData: webApp.initData, plan: subscriptionPlanChoice }),
       });
       const payload = await response.json();
       if (!response.ok || !payload?.invoiceLink) {
@@ -401,6 +417,85 @@ export default function Dashboard() {
     }
   };
 
+  const createManualPaymentRequest = async () => {
+    const webApp = initTelegramWebApp();
+    if (!webApp?.initData) {
+      toast.error("Оплата в личке доступна только в Telegram Mini App");
+      return;
+    }
+    try {
+      setManualRequestLoading(true);
+      const response = await fetch("/api/subscription/manual-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: webApp.initData, plan: subscriptionPlanChoice }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || "Не удалось отправить заявку");
+      toast.success("Заявка отправлена. Напишите в личку и отправьте чек.");
+      await fetchMyPendingManualRequest();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Ошибка заявки");
+    } finally {
+      setManualRequestLoading(false);
+    }
+  };
+
+  const fetchMyPendingManualRequest = async () => {
+    const webApp = initTelegramWebApp();
+    if (!webApp?.initData) return;
+    try {
+      const response = await fetch("/api/subscription/manual-request/my-pending", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: webApp.initData }),
+      });
+      const payload = await response.json();
+      if (response.ok) {
+        setPendingManualRequest(payload?.request || null);
+      }
+    } catch {
+      // no-op
+    }
+  };
+
+  const fetchAdminRequests = async () => {
+    const webApp = initTelegramWebApp();
+    if (!webApp?.initData || !isAdmin) return;
+    try {
+      setAdminLoading(true);
+      const response = await fetch("/api/admin/subscription-requests/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: webApp.initData }),
+      });
+      const payload = await response.json();
+      if (response.ok) setAdminRequests(payload?.requests || []);
+    } catch {
+      // no-op
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const processAdminRequest = async (requestId: string, action: "approve" | "reject") => {
+    const webApp = initTelegramWebApp();
+    if (!webApp?.initData || !isAdmin) return;
+    try {
+      const response = await fetch(`/api/admin/subscription-requests/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: webApp.initData, requestId }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || "Ошибка обработки");
+      toast.success(action === "approve" ? "Подписка активирована" : "Заявка отклонена");
+      await fetchAdminRequests();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Ошибка");
+    }
+  };
+
   const nextLvlXp = profile ? xpForNextLevel(profile.level) : 100;
   const currentLvlXp = profile ? xpForNextLevel(profile.level - 1) : 0;
   const progress = profile ? ((profile.xp - currentLvlXp) / (nextLvlXp - currentLvlXp)) * 100 : 0;
@@ -410,6 +505,12 @@ export default function Dashboard() {
   const subscriptionUntil = profile?.settings?.subscriptionUntil;
   const subscriptionPlan = profile?.settings?.subscriptionPlan || "free";
   const subscriptionActive = !!subscriptionUntil && new Date(subscriptionUntil) > new Date();
+  const isAdmin = !!profile?.telegramId && (import.meta.env.VITE_ADMIN_TELEGRAM_IDS || "").split(",").map((s: string) => s.trim()).includes(String(profile.telegramId));
+  const planLabelMap = {
+    month: "1 месяц",
+    half_year: "6 месяцев",
+    year: "12 месяцев",
+  } as const;
 
   const badgeView: Record<Exclude<BadgeStyle, "none">, { label: string; className: string }> = {
     bronze: { label: "Bronze", className: "bg-amber-700/20 text-amber-100 border-amber-500/40" },
@@ -423,7 +524,12 @@ export default function Dashboard() {
       ? "bg-gradient-to-r from-cyan-500 to-blue-600 border border-white/30 shadow-2xl"
       : profileStyle === "neon"
         ? "bg-gradient-to-r from-indigo-600 to-cyan-500 ring-2 ring-cyan-300/50 shadow-[0_0_30px_rgba(34,211,238,0.35)]"
-        : "bg-blue-600";
+      : "bg-blue-600";
+
+  useEffect(() => {
+    fetchMyPendingManualRequest().catch(() => null);
+    if (isAdmin) fetchAdminRequests().catch(() => null);
+  }, [isAdmin]);
 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Загрузка приключения...</div>;
 
@@ -673,6 +779,15 @@ export default function Dashboard() {
                       </div>
                       <span className="text-xs font-bold uppercase text-slate-500">{subscriptionPlan}</span>
                     </div>
+                    <select
+                      value={subscriptionPlanChoice}
+                      onChange={(e) => setSubscriptionPlanChoice(e.target.value as "month" | "half_year" | "year")}
+                      className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="month">{planLabelMap.month}</option>
+                      <option value="half_year">{planLabelMap.half_year}</option>
+                      <option value="year">{planLabelMap.year}</option>
+                    </select>
                     <Button
                       type="button"
                       onClick={purchaseSubscription}
@@ -681,7 +796,56 @@ export default function Dashboard() {
                     >
                       {purchaseLoading ? "Создаем счет..." : subscriptionActive ? "Продлить подписку" : "Купить подписку"}
                     </Button>
+                    <Button
+                      type="button"
+                      onClick={createManualPaymentRequest}
+                      disabled={manualRequestLoading || !!pendingManualRequest}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-11 font-semibold"
+                    >
+                      {manualRequestLoading ? "Отправляем заявку..." : pendingManualRequest ? "Заявка уже на проверке" : "Оплатить через личку"}
+                    </Button>
+                    <p className="text-xs text-slate-500">
+                      Для оплаты в личке напишите @your_username и отправьте чек. Затем дождитесь подтверждения.
+                    </p>
+                    {pendingManualRequest && (
+                      <p className="text-xs text-amber-600">
+                        Ваша заявка на проверке с {new Date(pendingManualRequest.createdAt).toLocaleString()}.
+                      </p>
+                    )}
                   </div>
+
+                  {isAdmin && (
+                    <div className="space-y-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-slate-800">Admin: заявки на подписку</p>
+                        <Button type="button" onClick={fetchAdminRequests} className="h-8 px-3 bg-slate-700 hover:bg-slate-800 text-white rounded-lg">
+                          {adminLoading ? "..." : "Обновить"}
+                        </Button>
+                      </div>
+                      {adminRequests.length === 0 ? (
+                        <p className="text-xs text-slate-500">Нет заявок в ожидании.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {adminRequests.map((r) => (
+                            <div key={r.id} className="p-3 rounded-xl bg-white border border-slate-200 space-y-2">
+                              <p className="text-xs text-slate-600">
+                                {r.telegramId} · {planLabelMap[r.plan]} · {r.amountExpected / 100} ₽
+                              </p>
+                              <p className="text-[11px] text-slate-500">{new Date(r.createdAt).toLocaleString()}</p>
+                              <div className="flex gap-2">
+                                <Button type="button" onClick={() => processAdminRequest(r.id, "approve")} className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg">
+                                  Одобрить
+                                </Button>
+                                <Button type="button" onClick={() => processAdminRequest(r.id, "reject")} className="h-8 px-3 bg-red-600 hover:bg-red-700 text-white rounded-lg">
+                                  Отклонить
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">

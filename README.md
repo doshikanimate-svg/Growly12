@@ -41,3 +41,10 @@ View your app in AI Studio: https://ai.studio/apps/36b3e15b-dfd5-4ca1-8723-d4c8c
    `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=https://your-public-domain/api/telegram-webhook`
 3. In Mini App settings, users can click "Купить подписку".
 4. After successful payment, webhook activates premium cosmetics for `tg_<telegramId>`.
+
+## Manual payment fallback + admin moderation
+
+1. Set `ADMIN_TELEGRAM_IDS` and `VITE_ADMIN_TELEGRAM_IDS` in env (comma-separated Telegram IDs).
+2. Users can submit "Оплатить через личку" requests from settings.
+3. Admins see pending requests in the app and can approve/reject.
+4. Approval activates premium subscription for the requested duration.

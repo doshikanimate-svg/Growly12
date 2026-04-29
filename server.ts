@@ -169,6 +169,53 @@ async function activateSubscriptionForTelegramUser(telegramUserId: number, durat
   }, { merge: true });
 }
 
+type SubscriptionPlanKey = "month" | "half_year" | "year";
+
+function getSubscriptionConfig(plan: SubscriptionPlanKey, paymentMode: string) {
+  const configs = {
+    month: {
+      durationDays: Number(process.env.TELEGRAM_SUBSCRIPTION_DAYS_MONTH || "30"),
+      stars: Number(process.env.TELEGRAM_SUBSCRIPTION_PRICE_STARS_MONTH || "199"),
+      rubKopecs: Number(process.env.TELEGRAM_SUBSCRIPTION_PRICE_RUB_KOPECS_MONTH || "19900"),
+      label: "1 месяц",
+    },
+    half_year: {
+      durationDays: Number(process.env.TELEGRAM_SUBSCRIPTION_DAYS_HALF_YEAR || "180"),
+      stars: Number(process.env.TELEGRAM_SUBSCRIPTION_PRICE_STARS_HALF_YEAR || "999"),
+      rubKopecs: Number(process.env.TELEGRAM_SUBSCRIPTION_PRICE_RUB_KOPECS_HALF_YEAR || "99900"),
+      label: "6 месяцев",
+    },
+    year: {
+      durationDays: Number(process.env.TELEGRAM_SUBSCRIPTION_DAYS_YEAR || "365"),
+      stars: Number(process.env.TELEGRAM_SUBSCRIPTION_PRICE_STARS_YEAR || "1799"),
+      rubKopecs: Number(process.env.TELEGRAM_SUBSCRIPTION_PRICE_RUB_KOPECS_YEAR || "179900"),
+      label: "12 месяцев",
+    },
+  };
+  const cfg = configs[plan];
+  return {
+    durationDays: cfg.durationDays,
+    amount: paymentMode === "yookassa" ? cfg.rubKopecs : cfg.stars,
+    label: cfg.label,
+  };
+}
+
+function parseAdminTelegramIds(): Set<string> {
+  const raw = process.env.ADMIN_TELEGRAM_IDS || "";
+  return new Set(raw.split(",").map((s) => s.trim()).filter(Boolean));
+}
+
+function validateTelegramInitDataOrThrow(initData: string, botToken: string) {
+  if (!verifyTelegramInitData(initData, botToken) || !isTelegramAuthFresh(initData)) {
+    throw new Error("Invalid or expired Telegram initData");
+  }
+  const tgUser = getTelegramUserFromInitData(initData);
+  if (!tgUser?.id) {
+    throw new Error("Telegram user not found in initData");
+  }
+  return tgUser;
+}
+
 async function copySubcollectionIfMissing(sourceUid: string, targetUid: string, subcollection: string) {
   const db = getFirestore();
   const sourceRef = db.collection("users").doc(sourceUid).collection(subcollection);
@@ -223,7 +270,9 @@ async function startServer() {
       }
 
       if (successfulPayment && telegramUserId) {
-        const durationDays = Number(process.env.TELEGRAM_SUBSCRIPTION_DAYS || "30");
+        const invoicePayload = successfulPayment?.invoice_payload as string | undefined;
+        const planFromPayload = (invoicePayload?.split("_")[2] as SubscriptionPlanKey | undefined) || "month";
+        const durationDays = getSubscriptionConfig(planFromPayload, "stars").durationDays;
         await activateSubscriptionForTelegramUser(Number(telegramUserId), durationDays);
       }
       res.sendStatus(200);
@@ -390,12 +439,15 @@ async function startServer() {
 
   app.post("/api/telegram/subscription/create-invoice", async (req, res) => {
     const initData = req.body?.initData;
+    const plan = (req.body?.plan as SubscriptionPlanKey) || "month";
     const botToken = process.env.BOT_TOKEN;
     const providerToken = process.env.TELEGRAM_PROVIDER_TOKEN || "";
     const paymentMode = (process.env.TELEGRAM_PAYMENT_MODE || "stars").toLowerCase();
-    const starsAmount = Number(process.env.TELEGRAM_SUBSCRIPTION_PRICE_STARS || "199");
-    const rubAmountKopecs = Number(process.env.TELEGRAM_SUBSCRIPTION_PRICE_RUB_KOPECS || "19900");
-    const durationDays = Number(process.env.TELEGRAM_SUBSCRIPTION_DAYS || "30");
+    const allowedPlans: SubscriptionPlanKey[] = ["month", "half_year", "year"];
+    if (!allowedPlans.includes(plan)) {
+      return res.status(400).json({ error: "Unsupported subscription plan" });
+    }
+    const { durationDays, amount, label } = getSubscriptionConfig(plan, paymentMode);
 
     if (!botToken) {
       return res.status(500).json({ error: "Missing BOT_TOKEN in .env.local" });
@@ -414,8 +466,8 @@ async function startServer() {
     try {
       const commonPayload = {
         title: "Growly Pro",
-        description: `Подписка Growly Pro на ${durationDays} дней`,
-        payload: `growly_pro_${tgUser.id}_${Date.now()}`,
+        description: `Подписка Growly Pro: ${label}`,
+        payload: `growly_pro_${plan}_${tgUser.id}_${Date.now()}`,
       };
 
       const invoicePayload = paymentMode === "yookassa"
@@ -423,13 +475,13 @@ async function startServer() {
             ...commonPayload,
             provider_token: providerToken,
             currency: "RUB",
-            prices: [{ label: `Growly Pro ${durationDays}d`, amount: rubAmountKopecs }],
+            prices: [{ label: `Growly Pro ${label}`, amount }],
           }
         : {
             ...commonPayload,
             provider_token: "",
             currency: "XTR",
-            prices: [{ label: `Growly Pro ${durationDays}d`, amount: starsAmount }],
+            prices: [{ label: `Growly Pro ${label}`, amount }],
             subscription_period: 2592000,
           };
 
@@ -442,11 +494,170 @@ async function startServer() {
         ok: true,
         invoiceLink,
         durationDays,
+        plan,
         paymentMode,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/subscription/manual-request", async (req, res) => {
+    const initData = req.body?.initData;
+    const plan = (req.body?.plan as SubscriptionPlanKey) || "month";
+    const botToken = process.env.BOT_TOKEN;
+    const paymentMode = "yookassa";
+    const allowedPlans: SubscriptionPlanKey[] = ["month", "half_year", "year"];
+
+    if (!botToken) return res.status(500).json({ error: "Missing BOT_TOKEN in .env.local" });
+    if (!initData || typeof initData !== "string") return res.status(400).json({ error: "initData is required" });
+    if (!allowedPlans.includes(plan)) return res.status(400).json({ error: "Unsupported subscription plan" });
+
+    try {
+      const tgUser = validateTelegramInitDataOrThrow(initData, botToken);
+      ensureFirebaseAdmin();
+      const db = getFirestore();
+      const uid = `tg_${tgUser.id}`;
+      const requestsRef = db.collection("subscriptionRequests");
+
+      const sameUser = await requestsRef.where("uid", "==", uid).get();
+      const pendingExisting = sameUser.docs.find((d) => d.data().status === "pending");
+      if (pendingExisting) {
+        return res.status(409).json({ error: "У вас уже есть заявка на проверке" });
+      }
+
+      const config = getSubscriptionConfig(plan, paymentMode);
+      const docRef = requestsRef.doc();
+      await docRef.set({
+        id: docRef.id,
+        uid,
+        telegramId: String(tgUser.id),
+        plan,
+        amountExpected: config.amount,
+        currency: "RUB",
+        durationDays: config.durationDays,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      });
+
+      return res.json({ ok: true, requestId: docRef.id, plan, amountExpected: config.amount });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(401).json({ error: message });
+    }
+  });
+
+  app.post("/api/subscription/manual-request/my-pending", async (req, res) => {
+    const initData = req.body?.initData;
+    const botToken = process.env.BOT_TOKEN;
+    if (!botToken) return res.status(500).json({ error: "Missing BOT_TOKEN in .env.local" });
+    if (!initData || typeof initData !== "string") return res.status(400).json({ error: "initData is required" });
+
+    try {
+      const tgUser = validateTelegramInitDataOrThrow(initData, botToken);
+      ensureFirebaseAdmin();
+      const db = getFirestore();
+      const uid = `tg_${tgUser.id}`;
+      const sameUser = await db.collection("subscriptionRequests").where("uid", "==", uid).get();
+      const pending = sameUser.docs
+        .map((d) => d.data())
+        .filter((r) => r.status === "pending")
+        .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0] || null;
+      return res.json({ ok: true, request: pending });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(401).json({ error: message });
+    }
+  });
+
+  app.post("/api/admin/subscription-requests/list", async (req, res) => {
+    const initData = req.body?.initData;
+    const botToken = process.env.BOT_TOKEN;
+    if (!botToken) return res.status(500).json({ error: "Missing BOT_TOKEN in .env.local" });
+    if (!initData || typeof initData !== "string") return res.status(400).json({ error: "initData is required" });
+
+    try {
+      const tgUser = validateTelegramInitDataOrThrow(initData, botToken);
+      const adminIds = parseAdminTelegramIds();
+      if (!adminIds.has(String(tgUser.id))) return res.status(403).json({ error: "Admin access required" });
+
+      ensureFirebaseAdmin();
+      const db = getFirestore();
+      const snapshot = await db.collection("subscriptionRequests").where("status", "==", "pending").get();
+      const requests = snapshot.docs
+        .map((d) => d.data())
+        .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      return res.json({ ok: true, requests });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(401).json({ error: message });
+    }
+  });
+
+  app.post("/api/admin/subscription-requests/approve", async (req, res) => {
+    const initData = req.body?.initData;
+    const requestId = req.body?.requestId;
+    const botToken = process.env.BOT_TOKEN;
+    if (!botToken) return res.status(500).json({ error: "Missing BOT_TOKEN in .env.local" });
+    if (!initData || typeof initData !== "string") return res.status(400).json({ error: "initData is required" });
+    if (!requestId || typeof requestId !== "string") return res.status(400).json({ error: "requestId is required" });
+
+    try {
+      const tgUser = validateTelegramInitDataOrThrow(initData, botToken);
+      const adminIds = parseAdminTelegramIds();
+      if (!adminIds.has(String(tgUser.id))) return res.status(403).json({ error: "Admin access required" });
+
+      ensureFirebaseAdmin();
+      const db = getFirestore();
+      const requestRef = db.collection("subscriptionRequests").doc(requestId);
+      const requestSnap = await requestRef.get();
+      if (!requestSnap.exists) return res.status(404).json({ error: "Request not found" });
+
+      const data = requestSnap.data() as { status?: string; telegramId?: string; durationDays?: number };
+      if (data.status !== "pending") return res.status(400).json({ error: "Request is not pending" });
+      if (!data.telegramId) return res.status(400).json({ error: "Missing telegramId in request" });
+
+      await activateSubscriptionForTelegramUser(Number(data.telegramId), Number(data.durationDays || 30));
+      await requestRef.set({
+        status: "approved",
+        processedAt: new Date().toISOString(),
+        processedByTelegramId: String(tgUser.id),
+      }, { merge: true });
+
+      return res.json({ ok: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(401).json({ error: message });
+    }
+  });
+
+  app.post("/api/admin/subscription-requests/reject", async (req, res) => {
+    const initData = req.body?.initData;
+    const requestId = req.body?.requestId;
+    const reason = req.body?.reason || "";
+    const botToken = process.env.BOT_TOKEN;
+    if (!botToken) return res.status(500).json({ error: "Missing BOT_TOKEN in .env.local" });
+    if (!initData || typeof initData !== "string") return res.status(400).json({ error: "initData is required" });
+    if (!requestId || typeof requestId !== "string") return res.status(400).json({ error: "requestId is required" });
+
+    try {
+      const tgUser = validateTelegramInitDataOrThrow(initData, botToken);
+      const adminIds = parseAdminTelegramIds();
+      if (!adminIds.has(String(tgUser.id))) return res.status(403).json({ error: "Admin access required" });
+
+      ensureFirebaseAdmin();
+      await getFirestore().collection("subscriptionRequests").doc(requestId).set({
+        status: "rejected",
+        reason: String(reason),
+        processedAt: new Date().toISOString(),
+        processedByTelegramId: String(tgUser.id),
+      }, { merge: true });
+
+      return res.json({ ok: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(401).json({ error: message });
     }
   });
 

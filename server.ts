@@ -724,6 +724,55 @@ async function startServer() {
     }
   });
 
+  app.post("/api/account/link-and-switch", async (req, res) => {
+    const idToken = getBearerToken(req);
+    const telegramIdRaw = req.body?.telegramId;
+    if (!idToken) return res.status(401).json({ error: "Missing Authorization Bearer token" });
+    if (!telegramIdRaw || typeof telegramIdRaw !== "string") return res.status(400).json({ error: "telegramId is required" });
+
+    try {
+      ensureFirebaseAdmin();
+      const decoded = await getAuth().verifyIdToken(idToken);
+      const sourceUid = decoded.uid;
+      const telegramId = telegramIdRaw.trim();
+      const targetUid = `tg_${telegramId}`;
+
+      const db = getAdminDb();
+      const sourceRef = db.collection("users").doc(sourceUid);
+      const targetRef = db.collection("users").doc(targetUid);
+      const [sourceSnap, targetSnap] = await Promise.all([sourceRef.get(), targetRef.get()]);
+
+      if (!sourceSnap.exists) return res.status(404).json({ error: "Current profile not found" });
+
+      const sourceData = sourceSnap.data() || {};
+      const targetData = targetSnap.exists ? targetSnap.data() || {} : {};
+      const mergedProfile = {
+        ...sourceData,
+        ...targetData,
+        id: targetUid,
+        telegramId,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await targetRef.set(mergedProfile, { merge: true });
+      const copiedQuests = await copySubcollectionIfMissing(sourceUid, targetUid, "quests");
+      const copiedXpHistory = await copySubcollectionIfMissing(sourceUid, targetUid, "xpHistory");
+      const firebaseToken = await getAuth().createCustomToken(targetUid, { telegramId });
+
+      return res.json({
+        ok: true,
+        sourceUid,
+        targetUid,
+        copiedQuests,
+        copiedXpHistory,
+        firebaseToken,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({ error: message });
+    }
+  });
+
   function botTokenFromEnv() {
     const token = process.env.BOT_TOKEN;
     if (!token) throw new Error("Missing BOT_TOKEN in .env.local");

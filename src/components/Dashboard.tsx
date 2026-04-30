@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { UserProfile, Quest, calculateLevel, xpForNextLevel, QuestStatus, QuestType, ThemeMode, BadgeStyle, ProfileStyle } from "@/types";
-import { db, auth } from "@/lib/firebase";
+import { db, auth, signInWithTelegramCustomToken } from "@/lib/firebase";
 import { collection, doc, getDoc, query, where, updateDoc, setDoc, onSnapshot, deleteDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -519,7 +519,7 @@ export default function Dashboard() {
     try {
       setSyncLoading(true);
       const token = await auth.currentUser.getIdToken();
-      const response = await fetch("/api/account/sync-from-telegram", {
+      const response = await fetch("/api/account/link-and-switch", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -529,8 +529,10 @@ export default function Dashboard() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || "Не удалось синхронизировать профиль");
-      toast.success("Профиль синхронизирован с Telegram");
-      await fetchProfile();
+      if (payload?.firebaseToken) {
+        await signInWithTelegramCustomToken(payload.firebaseToken);
+      }
+      toast.success("Профили связаны. Вы переключены на единый Telegram-профиль.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Ошибка синхронизации");
     } finally {

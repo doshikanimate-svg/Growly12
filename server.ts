@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import { initializeApp as initializeAdminApp, cert, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import cron from "node-cron";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -778,6 +779,61 @@ async function startServer() {
     if (!token) throw new Error("Missing BOT_TOKEN in .env.local");
     return token;
   }
+
+  // Setup Cron Job for Quest Deadlines
+  cron.schedule("* * * * *", async () => {
+    try {
+      const botToken = process.env.BOT_TOKEN;
+      if (!botToken) return;
+
+      ensureFirebaseAdmin();
+      const db = getAdminDb();
+      
+      const usersSnap = await db.collection("users").where("telegramId", "!=", null).get();
+      if (usersSnap.empty) return;
+
+      const now = new Date();
+
+      for (const userDoc of usersSnap.docs) {
+        const userData = userDoc.data();
+        const telegramId = userData.telegramId;
+        if (!telegramId) continue;
+
+        const questsSnap = await userDoc.ref.collection("quests")
+          .where("status", "==", "active")
+          .get();
+
+        for (const questDoc of questsSnap.docs) {
+          const quest = questDoc.data();
+          if (!quest.deadline || quest.notifyAdvance == null || quest.notified) continue;
+
+          const deadlineTime = new Date(quest.deadline).getTime();
+          const notifyTime = deadlineTime - quest.notifyAdvance * 60000;
+
+          if (now.getTime() >= notifyTime && now.getTime() < deadlineTime + 3600000) {
+            const text = `⚠️ <b>Напоминание о дедлайне!</b>\n\nКвест: <b>${quest.title}</b>\nДедлайн: ${new Date(quest.deadline).toLocaleString("ru-RU")}`;
+            try {
+              const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: telegramId, text, parse_mode: "HTML" })
+              });
+              
+              if (response.ok) {
+                await questDoc.ref.update({ notified: true, updatedAt: new Date().toISOString() });
+              } else {
+                console.error("Failed to send deadline notification to TG:", await response.text());
+              }
+            } catch (err) {
+              console.error("Error sending TG message:", err);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error in deadline cron job:", error);
+    }
+  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

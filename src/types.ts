@@ -47,6 +47,7 @@ export interface Quest {
   recurringDays: number[]; // 0-6 (Sun-Sat)
   deadline?: string;
   notifyAdvance?: number; // minutes before deadline
+  notified?: boolean;
   status: QuestStatus;
   category: string;
   createdAt: string;

@@ -91,6 +91,7 @@ export default function CreateQuestDialog({
       recurringDays: type === QuestType.DAILY ? recurringDays : [],
       deadline: deadline || null,
       notifyAdvance: deadline ? parseInt(notifyAdvance) : null,
+      notified: false,
       category: "Personal",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

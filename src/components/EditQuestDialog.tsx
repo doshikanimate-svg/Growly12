@@ -102,6 +102,7 @@ export default function EditQuestDialog({ quest, open, onOpenChange }: EditQuest
         recurringDays: type === QuestType.DAILY ? recurringDays : [],
         deadline: deadline || null,
         notifyAdvance: deadline ? parseInt(notifyAdvance) : null,
+        notified: false,
         updatedAt: new Date().toISOString(),
       });
       toast.success("Квест обновлен");

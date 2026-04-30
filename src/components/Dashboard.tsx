@@ -96,8 +96,11 @@ export default function Dashboard() {
   const [adminLoading, setAdminLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
   const [showLostStreakModal, setShowLostStreakModal] = useState(false);
+  const [showBenefitsModal, setShowBenefitsModal] = useState(false);
   const [activeTab, setActiveTab] = useState("quests");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const premiumCosmeticsUnlocked = profile?.settings?.premiumCosmeticsUnlocked ?? false;
 
   const handleDismissLostStreak = async () => {
     if (!auth.currentUser || !profile) return;
@@ -481,7 +484,6 @@ export default function Dashboard() {
   const saveSettings = async () => {
     if (!auth.currentUser || !profile) return;
     try {
-      const premiumCosmeticsUnlocked = profile.settings?.premiumCosmeticsUnlocked ?? false;
       const safeBadgeStyle: BadgeStyle =
         !premiumCosmeticsUnlocked && (editBadgeStyle === "gold" || editBadgeStyle === "crown")
           ? "silver"
@@ -1051,7 +1053,7 @@ export default function Dashboard() {
                       </p>
                     )}
 
-                    <AlertDialog>
+                    <AlertDialog open={showBenefitsModal} onOpenChange={setShowBenefitsModal}>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" className="w-full text-blue-600 font-bold hover:bg-blue-50 rounded-xl h-10 mt-2">
                            Посмотреть все преимущества Pro 🚀
@@ -1096,7 +1098,12 @@ export default function Dashboard() {
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogAction className="bg-slate-900 text-white rounded-xl w-full">Круто, спасибо!</AlertDialogAction>
+                          <AlertDialogAction 
+                            onClick={() => setShowBenefitsModal(false)}
+                            className="bg-slate-900 text-white rounded-xl w-full"
+                          >
+                            Круто, спасибо!
+                          </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>

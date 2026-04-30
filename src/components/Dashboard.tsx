@@ -100,7 +100,6 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("quests");
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const premiumCosmeticsUnlocked = profile?.settings?.premiumCosmeticsUnlocked ?? false;
 
   const handleDismissLostStreak = async () => {
     if (!auth.currentUser || !profile) return;

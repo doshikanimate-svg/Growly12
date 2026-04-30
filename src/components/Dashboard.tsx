@@ -220,7 +220,14 @@ export default function Dashboard() {
              normalizedProfile.settings.freezesUsedThisMonth = freezesUsed;
              normalizedProfile.settings.lastFreezeMonth = currentMonthStr;
              normalizedProfile.lastStreakUpdate = now.toISOString();
-             toast.success(`Стрик спасен! Заморозок: ${freezesUsed}/5 в этом месяце. ❄️`);
+             console.log("[Streak] DB Updated. freezesUsed:", freezesUsed);
+             
+             // Small delay to let onSnapshot/re-render settle
+             setTimeout(() => {
+               toast.success(`Стрик спасен! Заморозок: ${freezesUsed}/5 в этом месяце. ❄️`);
+               console.log("[Streak] Success toast should be visible now");
+             }, 500);
+             
              console.log("[Streak] Freeze applied successfully");
            } catch (err) {
              console.error("[Streak] Freeze update failed:", err);

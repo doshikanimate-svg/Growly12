@@ -50,6 +50,12 @@ import confetti from "canvas-confetti";
 import { initTelegramWebApp } from "@/lib/telegram";
 
 const COMPLETION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3";
+const SOUND_PACKS: Record<string, string> = {
+  default: COMPLETION_SOUND_URL,
+  mario: "https://www.myinstants.com/media/sounds/mario-coin.mp3",
+  zelda: "https://www.myinstants.com/media/sounds/zelda-secret.mp3",
+  gta: "https://www.myinstants.com/media/sounds/gta-san-andreas-mission-passed.mp3"
+};
 
 export default function Dashboard() {
   type ManualSubscriptionRequest = {
@@ -81,6 +87,7 @@ export default function Dashboard() {
   const [editTheme, setEditTheme] = useState<ThemeMode>("light");
   const [editBadgeStyle, setEditBadgeStyle] = useState<BadgeStyle>("none");
   const [editProfileStyle, setEditProfileStyle] = useState<ProfileStyle>("default");
+  const [editSoundPack, setEditSoundPack] = useState<SoundPack>("default");
   const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [subscriptionPlanChoice, setSubscriptionPlanChoice] = useState<"month" | "half_year" | "year">("month");
   const [manualRequestLoading, setManualRequestLoading] = useState(false);
@@ -118,10 +125,9 @@ export default function Dashboard() {
   }, []);
 
   const playSuccessSound = () => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(e => console.log("Audio play failed:", e));
-    }
+    const soundPack = profile?.settings?.soundPack || "default";
+    const audio = new Audio(SOUND_PACKS[soundPack] || COMPLETION_SOUND_URL);
+    audio.play().catch(e => console.log("Audio play failed:", e));
   };
 
   const triggerConfetti = () => {
@@ -174,6 +180,7 @@ export default function Dashboard() {
         freezesUsedThisMonth: raw.settings?.freezesUsedThisMonth ?? 0,
         lastFreezeMonth: raw.settings?.lastFreezeMonth,
         pendingLostStreak: raw.settings?.pendingLostStreak,
+        soundPack: raw.settings?.soundPack || "default",
       },
       createdAt: raw.createdAt || new Date().toISOString(),
       updatedAt: raw.updatedAt,
@@ -267,6 +274,7 @@ export default function Dashboard() {
     setEditTheme(theme);
     setEditBadgeStyle((normalizedProfile.settings.badgeStyle || "none") as BadgeStyle);
     setEditProfileStyle((normalizedProfile.settings.profileStyle || "default") as ProfileStyle);
+    setEditSoundPack((normalizedProfile.settings.soundPack || "default") as SoundPack);
     applyTheme(theme);
     setLoading(false);
   };
@@ -494,6 +502,7 @@ export default function Dashboard() {
           theme: editTheme,
           badgeStyle: safeBadgeStyle,
           profileStyle: safeProfileStyle,
+          soundPack: editSoundPack,
         },
         updatedAt: new Date().toISOString()
       });
@@ -511,6 +520,7 @@ export default function Dashboard() {
           theme: editTheme,
           badgeStyle: safeBadgeStyle,
           profileStyle: safeProfileStyle,
+          soundPack: editSoundPack,
         }
       } : null);
       setEditBadgeStyle(safeBadgeStyle);
@@ -1040,6 +1050,56 @@ export default function Dashboard() {
                         Ваша заявка на проверке с {new Date(pendingManualRequest.createdAt).toLocaleString()}.
                       </p>
                     )}
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" className="w-full text-blue-600 font-bold hover:bg-blue-50 rounded-xl h-10 mt-2">
+                           Посмотреть все преимущества Pro 🚀
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent className="rounded-3xl max-w-md">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                             Growly Pro <Flame className="w-6 h-6 text-orange-500 fill-orange-500" />
+                          </AlertDialogTitle>
+                          <AlertDialogDescription className="space-y-4 pt-4">
+                            <div className="space-y-3">
+                              <div className="flex gap-3">
+                                <div className="bg-blue-100 p-2 rounded-xl h-fit">❄️</div>
+                                <div>
+                                  <p className="font-bold text-slate-900">Заморозка стрика</p>
+                                  <p className="text-xs">До 5 автоматических заморозок в месяц. Стрик не сбросится, если вы пропустите день!</p>
+                                </div>
+                              </div>
+                              <div className="flex gap-3">
+                                <div className="bg-emerald-100 p-2 rounded-xl h-fit">🎨</div>
+                                <div>
+                                  <p className="font-bold text-slate-900">Premium кастомизация</p>
+                                  <p className="text-xs">Эксклюзивные темы (Ocean, Midnight), бейджи (Gold, Crown) и стили профиля.</p>
+                                </div>
+                              </div>
+                              <div className="flex gap-3">
+                                <div className="bg-purple-100 p-2 rounded-xl h-fit">🔊</div>
+                                <div>
+                                  <p className="font-bold text-slate-900">Звуковые паки</p>
+                                  <p className="text-xs">Звуки выполнения квестов из Mario, Zelda и GTA для полного погружения.</p>
+                                </div>
+                              </div>
+                              <div className="flex gap-3">
+                                <div className="bg-orange-100 p-2 rounded-xl h-fit">⚡️</div>
+                                <div>
+                                  <p className="font-bold text-slate-900">Будущие обновления</p>
+                                  <p className="text-xs">Приоритетный доступ к ИИ-коучу и аналитике продуктивности.</p>
+                                </div>
+                              </div>
+                            </div>
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogAction className="bg-slate-900 text-white rounded-xl w-full">Круто, спасибо!</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
 
                   {isAdmin && (
@@ -1093,6 +1153,25 @@ export default function Dashboard() {
                     </select>
                     {!premiumCosmeticsUnlocked && (
                       <p className="text-xs text-slate-500">Premium стили доступны по подписке.</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Bell className="w-4 h-4" /> Звук выполнения квеста
+                    </Label>
+                    <select
+                      value={editSoundPack}
+                      onChange={(e) => setEditSoundPack(e.target.value as SoundPack)}
+                      className="w-full h-12 rounded-xl border border-slate-200 bg-white px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="default">Стандартный</option>
+                      <option value="mario">Mario (Coin) (Premium)</option>
+                      <option value="zelda">Zelda (Secret) (Premium)</option>
+                      <option value="gta">GTA (Mission Passed) (Premium)</option>
+                    </select>
+                    {!premiumCosmeticsUnlocked && (
+                      <p className="text-xs text-slate-500">Звуковые паки доступны по подписке.</p>
                     )}
                   </div>
 

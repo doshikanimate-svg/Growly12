@@ -31,6 +31,7 @@ export interface UserProfile {
     freezesUsedThisMonth?: number;
     lastFreezeMonth?: string;
     pendingLostStreak?: number;
+    soundPack?: SoundPack;
   };
   createdAt: string;
   updatedAt?: string;
@@ -39,6 +40,7 @@ export interface UserProfile {
 export type ThemeMode = "light" | "dark" | "ocean";
 export type BadgeStyle = "none" | "bronze" | "silver" | "gold" | "crown";
 export type ProfileStyle = "default" | "glass" | "neon" | "cyberpunk" | "midnight" | "sunset";
+export type SoundPack = "default" | "mario" | "zelda" | "gta";
 
 export interface Quest {
   id: string;

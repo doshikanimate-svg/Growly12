@@ -28,6 +28,9 @@ export interface UserProfile {
     premiumCosmeticsUnlocked?: boolean;
     subscriptionPlan?: "free" | "pro";
     subscriptionUntil?: string;
+    freezesUsedThisMonth?: number;
+    lastFreezeMonth?: string;
+    pendingLostStreak?: number;
   };
   createdAt: string;
   updatedAt?: string;

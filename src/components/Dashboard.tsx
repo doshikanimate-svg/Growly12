@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { UserProfile, Quest, calculateLevel, xpForNextLevel, QuestStatus, QuestType, ThemeMode, BadgeStyle, ProfileStyle } from "@/types";
 import { db, auth, signInWithTelegramCustomToken } from "@/lib/firebase";
-import { collection, doc, getDoc, query, where, updateDoc, setDoc, onSnapshot, deleteDoc } from "firebase/firestore";
+import { collection, doc, getDoc, query, where, updateDoc, setDoc, onSnapshot, deleteDoc, deleteField } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -88,7 +88,17 @@ export default function Dashboard() {
   const [adminRequests, setAdminRequests] = useState<ManualSubscriptionRequest[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
+  const [showLostStreakModal, setShowLostStreakModal] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleDismissLostStreak = async () => {
+    if (!auth.currentUser || !profile) return;
+    await updateDoc(doc(db, "users", auth.currentUser.uid), {
+      "settings.pendingLostStreak": deleteField()
+    });
+    setProfile(prev => prev ? { ...prev, settings: { ...prev.settings, pendingLostStreak: undefined } } : null);
+    setShowLostStreakModal(false);
+  };
 
   const applyTheme = (theme: ThemeMode) => {
     document.documentElement.classList.remove("dark");
@@ -169,13 +179,68 @@ export default function Dashboard() {
     if (normalizedProfile.lastStreakUpdate) {
       const lastUpdate = new Date(normalizedProfile.lastStreakUpdate);
       const now = new Date();
-      const diffInDays = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
-      if (diffInDays > 1) {
-        updatedStreak = 0;
-        await updateDoc(docRef, {
-          streakCount: 0,
-          updatedAt: new Date().toISOString()
-        });
+      
+      const isSameDay = (d1: Date, d2: Date) => 
+        d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+      
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const isPro = normalizedProfile.settings.subscriptionPlan === "pro" && 
+                    normalizedProfile.settings.subscriptionUntil && 
+                    new Date(normalizedProfile.settings.subscriptionUntil) > now;
+
+      if (!isSameDay(lastUpdate, now) && !isSameDay(lastUpdate, yesterday)) {
+        const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                      
+        let freezesUsed = normalizedProfile.settings.lastFreezeMonth === currentMonthStr 
+                          ? (normalizedProfile.settings.freezesUsedThisMonth || 0) 
+                          : 0;
+
+        if (isPro && freezesUsed < 5) {
+           freezesUsed += 1;
+           await updateDoc(docRef, {
+             "settings.freezesUsedThisMonth": freezesUsed,
+             "settings.lastFreezeMonth": currentMonthStr,
+             lastStreakUpdate: yesterday.toISOString(),
+             updatedAt: now.toISOString()
+           });
+           normalizedProfile.settings.freezesUsedThisMonth = freezesUsed;
+           normalizedProfile.settings.lastFreezeMonth = currentMonthStr;
+           normalizedProfile.lastStreakUpdate = yesterday.toISOString();
+           toast.success(`Стрик спасен! Заморозок: ${freezesUsed}/5 в этом месяце.`, { icon: "❄️" });
+        } else {
+           const lostStreak = updatedStreak;
+           updatedStreak = 0;
+           normalizedProfile.streakCount = 0;
+           
+           const updates: any = {
+             streakCount: 0,
+             updatedAt: now.toISOString()
+           };
+           
+           if (!isPro && lostStreak > 0) {
+             updates["settings.pendingLostStreak"] = lostStreak;
+             normalizedProfile.settings.pendingLostStreak = lostStreak;
+           }
+           
+           await updateDoc(docRef, updates);
+        }
+      }
+
+      if (isPro && normalizedProfile.settings.pendingLostStreak) {
+         updatedStreak = normalizedProfile.settings.pendingLostStreak;
+         await updateDoc(docRef, {
+           streakCount: updatedStreak,
+           "settings.pendingLostStreak": deleteField()
+         });
+         normalizedProfile.streakCount = updatedStreak;
+         delete normalizedProfile.settings.pendingLostStreak;
+         toast.success("Ваш стрик был успешно восстановлен благодаря подписке Growly Pro!", { icon: "🔥" });
+      }
+
+      if (!isPro && normalizedProfile.settings.pendingLostStreak) {
+         setShowLostStreakModal(true);
       }
     }
 
@@ -309,7 +374,38 @@ export default function Dashboard() {
         if (isSameDay(lastUpdate, yesterday)) {
           newStreak += 1;
         } else {
-          newStreak = 1;
+          const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          const isPro = profile.settings.subscriptionPlan === "pro" && 
+                        profile.settings.subscriptionUntil && 
+                        new Date(profile.settings.subscriptionUntil) > now;
+          let freezesUsed = profile.settings.lastFreezeMonth === currentMonthStr 
+                            ? (profile.settings.freezesUsedThisMonth || 0) 
+                            : 0;
+                            
+          if (isPro && freezesUsed < 5) {
+             freezesUsed += 1;
+             newStreak += 1;
+             await updateDoc(doc(db, "users", auth.currentUser.uid), {
+                "settings.freezesUsedThisMonth": freezesUsed,
+                "settings.lastFreezeMonth": currentMonthStr
+             });
+             toast.success(`Стрик спасен! Заморозок: ${freezesUsed}/5 в этом месяце.`, { icon: "❄️" });
+             setProfile(prev => prev ? { 
+                ...prev, 
+                settings: { ...prev.settings, freezesUsedThisMonth: freezesUsed, lastFreezeMonth: currentMonthStr } 
+             } : null);
+          } else {
+             newStreak = 1;
+             if (!isPro && profile.streakCount > 0) {
+                await updateDoc(doc(db, "users", auth.currentUser.uid), { 
+                   "settings.pendingLostStreak": profile.streakCount 
+                });
+                setProfile(prev => prev ? { 
+                   ...prev, 
+                   settings: { ...prev.settings, pendingLostStreak: profile.streakCount } 
+                } : null);
+             }
+          }
         }
       }
 
@@ -1007,6 +1103,32 @@ export default function Dashboard() {
 
       <CreateQuestDialog onCreated={fetchProfile} />
       <EditQuestDialog quest={editingQuest} open={isEditOpen} onOpenChange={setIsEditOpen} />
+      
+      <AlertDialog open={showLostStreakModal} onOpenChange={setShowLostStreakModal}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-600 flex items-center gap-2">
+              <Flame className="w-6 h-6" /> О нет! Ваш огонек погас!
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-600">
+              Вы пропустили выполнение квестов и ваш стрик из <b>{profile?.settings?.pendingLostStreak} дней</b> обнулился. 
+              <br/><br/>
+              Но вы можете спасти его! Оформите подписку <b>Growly Pro</b> прямо сейчас, и мы автоматически восстановим ваш стрик, а также дадим вам до 5 заморозок стрика каждый месяц.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2 mt-4">
+            <Button variant="outline" onClick={handleDismissLostStreak} className="rounded-xl w-full sm:w-auto text-slate-500 border-slate-200">
+              Смириться с потерей
+            </Button>
+            <Button onClick={() => {
+              setShowLostStreakModal(false);
+              setTab("settings");
+            }} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl w-full sm:w-auto shadow-lg shadow-emerald-200">
+              Перейти к подписке
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

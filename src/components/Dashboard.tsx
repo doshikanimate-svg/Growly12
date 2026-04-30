@@ -370,42 +370,48 @@ export default function Dashboard() {
 
       if (!lastUpdate) {
         newStreak = 1;
-      } else if (!isSameDay(lastUpdate, now)) {
-        if (isSameDay(lastUpdate, yesterday)) {
-          newStreak += 1;
+      } else if (isSameDay(lastUpdate, now)) {
+        // Same day: only start streak if it's 0 (fresh start after reset)
+        if (newStreak === 0) newStreak = 1;
+        // else: already did something today, streak stays same
+      } else if (isSameDay(lastUpdate, yesterday)) {
+        // Continued streak from yesterday
+        newStreak += 1;
+      } else {
+        // Missed 2+ days
+        const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const isPro = profile.settings.subscriptionPlan === "pro" && 
+                      profile.settings.subscriptionUntil && 
+                      new Date(profile.settings.subscriptionUntil) > now;
+        let freezesUsed = profile.settings.lastFreezeMonth === currentMonthStr 
+                          ? (profile.settings.freezesUsedThisMonth || 0) 
+                          : 0;
+                          
+        if (isPro && freezesUsed < 5) {
+           freezesUsed += 1;
+           newStreak += 1;
+           await updateDoc(doc(db, "users", auth.currentUser.uid), {
+              "settings.freezesUsedThisMonth": freezesUsed,
+              "settings.lastFreezeMonth": currentMonthStr
+           });
+           toast.success(`Стрик спасен! Заморозок: ${freezesUsed}/5 в этом месяце.`, { icon: "❄️" });
+           setProfile(prev => prev ? { 
+              ...prev, 
+              settings: { ...prev.settings, freezesUsedThisMonth: freezesUsed, lastFreezeMonth: currentMonthStr } 
+           } : null);
         } else {
-          const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-          const isPro = profile.settings.subscriptionPlan === "pro" && 
-                        profile.settings.subscriptionUntil && 
-                        new Date(profile.settings.subscriptionUntil) > now;
-          let freezesUsed = profile.settings.lastFreezeMonth === currentMonthStr 
-                            ? (profile.settings.freezesUsedThisMonth || 0) 
-                            : 0;
-                            
-          if (isPro && freezesUsed < 5) {
-             freezesUsed += 1;
-             newStreak += 1;
-             await updateDoc(doc(db, "users", auth.currentUser.uid), {
-                "settings.freezesUsedThisMonth": freezesUsed,
-                "settings.lastFreezeMonth": currentMonthStr
-             });
-             toast.success(`Стрик спасен! Заморозок: ${freezesUsed}/5 в этом месяце.`, { icon: "❄️" });
-             setProfile(prev => prev ? { 
-                ...prev, 
-                settings: { ...prev.settings, freezesUsedThisMonth: freezesUsed, lastFreezeMonth: currentMonthStr } 
-             } : null);
-          } else {
-             newStreak = 1;
-             if (!isPro && profile.streakCount > 0) {
-                await updateDoc(doc(db, "users", auth.currentUser.uid), { 
-                   "settings.pendingLostStreak": profile.streakCount 
-                });
-                setProfile(prev => prev ? { 
-                   ...prev, 
-                   settings: { ...prev.settings, pendingLostStreak: profile.streakCount } 
-                } : null);
-             }
-          }
+           const savedStreak = profile.streakCount;
+           newStreak = 1;
+           if (!isPro && savedStreak > 0) {
+              await updateDoc(doc(db, "users", auth.currentUser.uid), { 
+                 "settings.pendingLostStreak": savedStreak
+              });
+              setProfile(prev => prev ? { 
+                 ...prev, 
+                 settings: { ...prev.settings, pendingLostStreak: savedStreak } 
+              } : null);
+              setTimeout(() => setShowLostStreakModal(true), 500);
+           }
         }
       }
 

@@ -362,7 +362,7 @@ export default function Dashboard() {
           ? "silver"
           : editBadgeStyle;
       const safeProfileStyle: ProfileStyle =
-        !premiumCosmeticsUnlocked && editProfileStyle === "neon"
+        !premiumCosmeticsUnlocked && ["neon", "cyberpunk", "midnight", "sunset"].includes(editProfileStyle)
           ? "glass"
           : editProfileStyle;
 
@@ -605,6 +605,12 @@ export default function Dashboard() {
       ? "bg-gradient-to-r from-cyan-500 to-blue-600 border border-white/30 shadow-2xl"
       : profileStyle === "neon"
         ? "bg-gradient-to-r from-indigo-600 to-cyan-500 ring-2 ring-cyan-300/50 shadow-[0_0_30px_rgba(34,211,238,0.35)]"
+      : profileStyle === "cyberpunk"
+        ? "bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500 ring-2 ring-pink-400/50 shadow-[4px_4px_0px_rgba(219,39,119,0.8)] text-white"
+      : profileStyle === "midnight"
+        ? "bg-gradient-to-r from-slate-900 to-violet-950 ring-1 ring-violet-500/30 shadow-[0_0_40px_rgba(139,92,246,0.3)] text-violet-100"
+      : profileStyle === "sunset"
+        ? "bg-gradient-to-tr from-rose-600 via-red-500 to-orange-500 ring-2 ring-orange-400/50 shadow-[0_10px_40px_rgba(244,63,94,0.4)] text-white"
       : "bg-blue-600";
 
   useEffect(() => {
@@ -960,9 +966,12 @@ export default function Dashboard() {
                       <option value="default">Default</option>
                       <option value="glass">Glass</option>
                       <option value="neon">Neon (Premium)</option>
+                      <option value="cyberpunk">Cyberpunk (Premium)</option>
+                      <option value="midnight">Midnight (Premium)</option>
+                      <option value="sunset">Sunset (Premium)</option>
                     </select>
                     {!premiumCosmeticsUnlocked && (
-                      <p className="text-xs text-slate-500">Neon доступен по подписке.</p>
+                      <p className="text-xs text-slate-500">Premium стили доступны по подписке.</p>
                     )}
                   </div>
 

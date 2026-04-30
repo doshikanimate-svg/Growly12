@@ -35,7 +35,7 @@ export interface UserProfile {
 
 export type ThemeMode = "light" | "dark" | "ocean";
 export type BadgeStyle = "none" | "bronze" | "silver" | "gold" | "crown";
-export type ProfileStyle = "default" | "glass" | "neon";
+export type ProfileStyle = "default" | "glass" | "neon" | "cyberpunk" | "midnight" | "sunset";
 
 export interface Quest {
   id: string;

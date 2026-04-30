@@ -289,6 +289,28 @@ async function startServer() {
         const durationDays = getSubscriptionConfig(planFromPayload, "stars").durationDays;
         await activateSubscriptionForTelegramUser(Number(telegramUserId), durationDays);
       }
+
+      if (message?.text === "/start" && telegramUserId) {
+        const appUrl = process.env.APP_URL;
+        if (appUrl) {
+          const text = "Добро пожаловать в Growly! Нажми на кнопку ниже, чтобы запустить приложение.";
+          const replyMarkup = {
+            inline_keyboard: [[{ text: "Запустить Growly 🚀", web_app: { url: appUrl } }]]
+          };
+          await fetch(`https://api.telegram.org/bot${botTokenFromEnv()}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: telegramUserId,
+              text,
+              reply_markup: replyMarkup
+            })
+          }).catch(err => console.error("Error sending /start reply:", err));
+        } else {
+           console.warn("APP_URL not set, cannot send web_app button");
+        }
+      }
+
       res.sendStatus(200);
     } catch (error) {
       console.error("Telegram webhook processing error:", error);

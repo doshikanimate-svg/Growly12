@@ -170,6 +170,9 @@ export default function Dashboard() {
         premiumCosmeticsUnlocked: raw.settings?.premiumCosmeticsUnlocked ?? false,
         subscriptionPlan: raw.settings?.subscriptionPlan || "free",
         subscriptionUntil: raw.settings?.subscriptionUntil,
+        freezesUsedThisMonth: raw.settings?.freezesUsedThisMonth ?? 0,
+        lastFreezeMonth: raw.settings?.lastFreezeMonth,
+        pendingLostStreak: raw.settings?.pendingLostStreak,
       },
       createdAt: raw.createdAt || new Date().toISOString(),
       updatedAt: raw.updatedAt,
@@ -190,7 +193,12 @@ export default function Dashboard() {
                     normalizedProfile.settings.subscriptionUntil && 
                     new Date(normalizedProfile.settings.subscriptionUntil) > now;
 
+      console.log("[Streak] lastUpdate:", lastUpdate.toISOString(), "now:", now.toISOString());
+      console.log("[Streak] isSameDay(now):", isSameDay(lastUpdate, now), "isSameDay(yesterday):", isSameDay(lastUpdate, yesterday));
+      console.log("[Streak] isPro:", isPro, "streakCount:", updatedStreak);
+
       if (!isSameDay(lastUpdate, now) && !isSameDay(lastUpdate, yesterday)) {
+        console.log("[Streak] MISSED DAY detected - processing...");
         const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
                       
         let freezesUsed = normalizedProfile.settings.lastFreezeMonth === currentMonthStr 

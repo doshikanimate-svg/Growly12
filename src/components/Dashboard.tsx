@@ -143,12 +143,37 @@ export default function Dashboard() {
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
-      const data = docSnap.data() as UserProfile;
+      const raw = docSnap.data() as Partial<UserProfile>;
+      const normalizedProfile: UserProfile = {
+        id: raw.id || auth.currentUser.uid,
+        displayName: raw.displayName || auth.currentUser.displayName || "Герой",
+        xp: typeof raw.xp === "number" ? raw.xp : 0,
+        level: typeof raw.level === "number" ? raw.level : 1,
+        streakCount: typeof raw.streakCount === "number" ? raw.streakCount : 0,
+        lastStreakUpdate: raw.lastStreakUpdate,
+        telegramId: raw.telegramId,
+        settings: {
+          timezone: raw.settings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+          notificationsEnabled: raw.settings?.notificationsEnabled ?? true,
+          notifyBeforeDeadline: raw.settings?.notifyBeforeDeadline ?? 30,
+          theme: raw.settings?.theme || "light",
+          badgeStyle: raw.settings?.badgeStyle || "none",
+          profileStyle: raw.settings?.profileStyle || "default",
+          premiumCosmeticsUnlocked: raw.settings?.premiumCosmeticsUnlocked ?? false,
+          subscriptionPlan: raw.settings?.subscriptionPlan || "free",
+          subscriptionUntil: raw.settings?.subscriptionUntil,
+        },
+        createdAt: raw.createdAt || new Date().toISOString(),
+        updatedAt: raw.updatedAt,
+      };
+
+      // Backfill missing profile fields so UI is complete before any user activity.
+      await setDoc(docRef, normalizedProfile, { merge: true });
       
       // Check for streak reset on load
-      let updatedStreak = data.streakCount || 0;
-      if (data.lastStreakUpdate) {
-        const lastUpdate = new Date(data.lastStreakUpdate);
+      let updatedStreak = normalizedProfile.streakCount || 0;
+      if (normalizedProfile.lastStreakUpdate) {
+        const lastUpdate = new Date(normalizedProfile.lastStreakUpdate);
         const now = new Date();
         const diffInDays = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
         
@@ -161,14 +186,14 @@ export default function Dashboard() {
         }
       }
 
-      setProfile({ ...data, streakCount: updatedStreak });
-      setEditName(data.displayName);
-      setEditTimezone(data.settings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
-      setEditNotifications(data.settings?.notificationsEnabled ?? true);
-      const theme = (data.settings?.theme || "light") as ThemeMode;
+      setProfile({ ...normalizedProfile, streakCount: updatedStreak });
+      setEditName(normalizedProfile.displayName);
+      setEditTimezone(normalizedProfile.settings.timezone);
+      setEditNotifications(normalizedProfile.settings.notificationsEnabled);
+      const theme = (normalizedProfile.settings.theme || "light") as ThemeMode;
       setEditTheme(theme);
-      setEditBadgeStyle((data.settings?.badgeStyle || "none") as BadgeStyle);
-      setEditProfileStyle((data.settings?.profileStyle || "default") as ProfileStyle);
+      setEditBadgeStyle((normalizedProfile.settings.badgeStyle || "none") as BadgeStyle);
+      setEditProfileStyle((normalizedProfile.settings.profileStyle || "default") as ProfileStyle);
       applyTheme(theme);
     } else {
       const newProfile: UserProfile = {

@@ -19,10 +19,26 @@ export async function linkTelegramToCurrentUser(telegramUser: TelegramWebAppUser
   if (!auth.currentUser) return;
 
   const userRef = doc(db, "users", auth.currentUser.uid);
+  const nowIso = new Date().toISOString();
   await setDoc(userRef, {
     id: auth.currentUser.uid,
+    displayName: auth.currentUser.displayName || telegramUser.username || telegramUser.first_name || "Герой",
+    xp: 0,
+    level: 1,
+    streakCount: 0,
+    createdAt: nowIso,
     telegramId: String(telegramUser.id),
-    updatedAt: new Date().toISOString(),
+    settings: {
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      notificationsEnabled: true,
+      notifyBeforeDeadline: 30,
+      theme: "light",
+      badgeStyle: "none",
+      profileStyle: "default",
+      premiumCosmeticsUnlocked: false,
+      subscriptionPlan: "free",
+    },
+    updatedAt: nowIso,
   }, { merge: true });
 }
 

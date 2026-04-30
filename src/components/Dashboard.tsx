@@ -76,6 +76,7 @@ export default function Dashboard() {
   // Settings state
   const [editName, setEditName] = useState("");
   const [editTimezone, setEditTimezone] = useState("");
+  const [editTelegramId, setEditTelegramId] = useState("");
   const [editNotifications, setEditNotifications] = useState(true);
   const [editTheme, setEditTheme] = useState<ThemeMode>("light");
   const [editBadgeStyle, setEditBadgeStyle] = useState<BadgeStyle>("none");
@@ -86,6 +87,7 @@ export default function Dashboard() {
   const [pendingManualRequest, setPendingManualRequest] = useState<ManualSubscriptionRequest | null>(null);
   const [adminRequests, setAdminRequests] = useState<ManualSubscriptionRequest[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
+  const [syncLoading, setSyncLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const applyTheme = (theme: ThemeMode) => {
@@ -180,6 +182,7 @@ export default function Dashboard() {
     setProfile({ ...normalizedProfile, streakCount: updatedStreak });
     setEditName(normalizedProfile.displayName);
     setEditTimezone(normalizedProfile.settings.timezone);
+    setEditTelegramId(normalizedProfile.telegramId || "");
     setEditNotifications(normalizedProfile.settings.notificationsEnabled);
     const theme = (normalizedProfile.settings.theme || "light") as ThemeMode;
     setEditTheme(theme);
@@ -366,6 +369,7 @@ export default function Dashboard() {
       const userRef = doc(db, "users", auth.currentUser.uid);
       await updateDoc(userRef, {
         displayName: editName,
+        telegramId: editTelegramId.trim() || null,
         settings: {
           ...profile.settings,
           timezone: editTimezone,
@@ -382,6 +386,7 @@ export default function Dashboard() {
       setProfile(prev => prev ? { 
         ...prev, 
         displayName: editName,
+        telegramId: editTelegramId.trim() || undefined,
         settings: { 
           ...prev.settings, 
           timezone: editTimezone, 
@@ -500,6 +505,36 @@ export default function Dashboard() {
       }
     } catch {
       // no-op
+    }
+  };
+
+  const syncFromTelegramProfile = async () => {
+    if (!auth.currentUser) return;
+    const telegramId = editTelegramId.trim();
+    if (!telegramId) {
+      toast.error("Укажите Telegram ID для синхронизации");
+      return;
+    }
+
+    try {
+      setSyncLoading(true);
+      const token = await auth.currentUser.getIdToken();
+      const response = await fetch("/api/account/sync-from-telegram", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ telegramId }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || "Не удалось синхронизировать профиль");
+      toast.success("Профиль синхронизирован с Telegram");
+      await fetchProfile();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Ошибка синхронизации");
+    } finally {
+      setSyncLoading(false);
     }
   };
 
@@ -751,6 +786,26 @@ export default function Dashboard() {
                       <User className="w-4 h-4" /> Никнейм
                     </Label>
                     <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="rounded-xl h-12" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <User className="w-4 h-4" /> Telegram ID
+                    </Label>
+                    <Input
+                      value={editTelegramId}
+                      onChange={(e) => setEditTelegramId(e.target.value)}
+                      placeholder="Например: 2115627017"
+                      className="rounded-xl h-12"
+                    />
+                    <Button
+                      type="button"
+                      onClick={syncFromTelegramProfile}
+                      disabled={syncLoading}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-11 font-semibold"
+                    >
+                      {syncLoading ? "Синхронизируем..." : "Синхронизировать с Telegram"}
+                    </Button>
                   </div>
 
                   <div className="space-y-2">

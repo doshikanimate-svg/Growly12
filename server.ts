@@ -97,6 +97,14 @@ function getAdminDb() {
   return databaseId ? getFirestore(undefined, databaseId) : getFirestore();
 }
 
+function getBearerToken(req: express.Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return null;
+  const [scheme, token] = authHeader.split(" ");
+  if (scheme?.toLowerCase() !== "bearer" || !token) return null;
+  return token;
+}
+
 async function setTelegramMenuButton(botToken: string, text: string, url: string) {
   const response = await fetch(`https://api.telegram.org/bot${botToken}/setChatMenuButton`, {
     method: "POST",
@@ -663,6 +671,56 @@ async function startServer() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return res.status(401).json({ error: message });
+    }
+  });
+
+  app.post("/api/account/sync-from-telegram", async (req, res) => {
+    const idToken = getBearerToken(req);
+    const telegramIdRaw = req.body?.telegramId;
+    if (!idToken) return res.status(401).json({ error: "Missing Authorization Bearer token" });
+    if (!telegramIdRaw || typeof telegramIdRaw !== "string") return res.status(400).json({ error: "telegramId is required" });
+
+    try {
+      ensureFirebaseAdmin();
+      const decoded = await getAuth().verifyIdToken(idToken);
+      const targetUid = decoded.uid;
+      const telegramId = telegramIdRaw.trim();
+      const sourceUid = `tg_${telegramId}`;
+
+      const db = getAdminDb();
+      const sourceRef = db.collection("users").doc(sourceUid);
+      const targetRef = db.collection("users").doc(targetUid);
+      const [sourceSnap, targetSnap] = await Promise.all([sourceRef.get(), targetRef.get()]);
+
+      if (!sourceSnap.exists) {
+        return res.status(404).json({ error: "Telegram profile not found" });
+      }
+
+      const sourceData = sourceSnap.data() || {};
+      const targetData = targetSnap.exists ? targetSnap.data() || {} : {};
+
+      const mergedProfile = {
+        ...sourceData,
+        ...targetData,
+        id: targetUid,
+        telegramId,
+        updatedAt: new Date().toISOString(),
+      };
+      await targetRef.set(mergedProfile, { merge: true });
+
+      const copiedQuests = await copySubcollectionIfMissing(sourceUid, targetUid, "quests");
+      const copiedXpHistory = await copySubcollectionIfMissing(sourceUid, targetUid, "xpHistory");
+
+      return res.json({
+        ok: true,
+        sourceUid,
+        targetUid,
+        copiedQuests,
+        copiedXpHistory,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({ error: message });
     }
   });
 

@@ -196,8 +196,10 @@ export default function Dashboard() {
       console.log("[Streak] lastUpdate:", lastUpdate.toISOString(), "now:", now.toISOString());
       console.log("[Streak] isSameDay(now):", isSameDay(lastUpdate, now), "isSameDay(yesterday):", isSameDay(lastUpdate, yesterday));
       console.log("[Streak] isPro:", isPro, "streakCount:", updatedStreak);
+      toast.info(`[DEBUG] Check: last=${lastUpdate.getHours()}:${lastUpdate.getMinutes()} now=${now.getHours()}:${now.getMinutes()} same=${isSameDay(lastUpdate, now)}`);
 
       if (!isSameDay(lastUpdate, now) && !isSameDay(lastUpdate, yesterday)) {
+        toast.warning(`[DEBUG] Missed! Pro=${isPro} Freezes=${normalizedProfile.settings.freezesUsedThisMonth}`);
         console.log("[Streak] MISSED DAY detected - processing...");
         const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
                       
@@ -206,17 +208,24 @@ export default function Dashboard() {
                           : 0;
 
         if (isPro && freezesUsed < 5) {
-           freezesUsed += 1;
-           await updateDoc(docRef, {
-             "settings.freezesUsedThisMonth": freezesUsed,
-             "settings.lastFreezeMonth": currentMonthStr,
-             lastStreakUpdate: now.toISOString(),
-             updatedAt: now.toISOString()
-           });
-           normalizedProfile.settings.freezesUsedThisMonth = freezesUsed;
-           normalizedProfile.settings.lastFreezeMonth = currentMonthStr;
-           normalizedProfile.lastStreakUpdate = now.toISOString();
-           toast.success(`Стрик спасен! Заморозок: ${freezesUsed}/5 в этом месяце.`, { icon: "❄️" });
+           console.log("[Streak] Attempting to save streak with freeze...");
+           try {
+             freezesUsed += 1;
+             await updateDoc(docRef, {
+               "settings.freezesUsedThisMonth": freezesUsed,
+               "settings.lastFreezeMonth": currentMonthStr,
+               lastStreakUpdate: now.toISOString(),
+               updatedAt: now.toISOString()
+             });
+             normalizedProfile.settings.freezesUsedThisMonth = freezesUsed;
+             normalizedProfile.settings.lastFreezeMonth = currentMonthStr;
+             normalizedProfile.lastStreakUpdate = now.toISOString();
+             toast.success(`Стрик спасен! Заморозок: ${freezesUsed}/5 в этом месяце. ❄️`);
+             console.log("[Streak] Freeze applied successfully");
+           } catch (err) {
+             console.error("[Streak] Freeze update failed:", err);
+             toast.error("Не удалось сохранить стрик: ошибка базы данных");
+           }
         } else {
            const lostStreak = updatedStreak;
            updatedStreak = 0;
@@ -319,7 +328,11 @@ export default function Dashboard() {
     const userRef = doc(db, "users", auth.currentUser.uid);
     const unsubscribeUser = onSnapshot(userRef, (snapshot) => {
       if (snapshot.exists()) {
-        applyProfileData(snapshot.data() as Partial<UserProfile>).catch(() => null);
+        const data = snapshot.data() as Partial<UserProfile>;
+        applyProfileData(data).catch((err) => {
+          console.error("applyProfileData error:", err);
+          toast.error("Ошибка при обновлении профиля");
+        });
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `users/${auth.currentUser.uid}`);

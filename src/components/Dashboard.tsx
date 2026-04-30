@@ -797,7 +797,7 @@ export default function Dashboard() {
                     <Input
                       value={editTelegramId}
                       onChange={(e) => setEditTelegramId(e.target.value)}
-                      placeholder="Например: 2115627017"
+                      placeholder="Например: 123456789"
                       className="rounded-xl h-12"
                     />
                     <Button

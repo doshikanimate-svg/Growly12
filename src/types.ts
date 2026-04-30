@@ -46,6 +46,7 @@ export interface Quest {
   type: QuestType;
   recurringDays: number[]; // 0-6 (Sun-Sat)
   deadline?: string;
+  localTime?: string; // "HH:mm" for recurring quests
   notifyAdvance?: number; // minutes before deadline
   notified?: boolean;
   status: QuestStatus;

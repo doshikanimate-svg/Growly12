@@ -821,6 +821,50 @@ async function startServer() {
         const telegramId = userData.telegramId;
         if (!telegramId) continue;
 
+        const userTimezone = userData.settings?.timezone || "UTC";
+        const userTimeStr = now.toLocaleString("en-US", { timeZone: userTimezone });
+        const userLocalNow = new Date(userTimeStr);
+        const userDayOfWeek = userLocalNow.getDay();
+        const todayString = userLocalNow.toDateString();
+
+        const completedQuestsSnap = await userDoc.ref.collection("quests").where("status", "==", "completed").get();
+        for (const questDoc of completedQuestsSnap.docs) {
+          const quest = questDoc.data();
+          if (quest.type === "daily" && quest.recurringDays && quest.recurringDays.includes(userDayOfWeek)) {
+            let completedToday = false;
+            if (quest.completedAt) {
+              const completedTimeStr = new Date(quest.completedAt).toLocaleString("en-US", { timeZone: userTimezone });
+              if (new Date(completedTimeStr).toDateString() === todayString) {
+                completedToday = true;
+              }
+            }
+            if (!completedToday) {
+              const updates: any = {
+                status: "active",
+                notified: false,
+                updatedAt: now.toISOString(),
+                completedAt: null
+              };
+              if (quest.deadline && quest.localTime) {
+                const startUTC = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                startUTC.setUTCMinutes(Number(quest.localTime.split(":")[1] || 0));
+                startUTC.setUTCSeconds(0);
+                startUTC.setUTCMilliseconds(0);
+                for (let i = 0; i < 48; i++) {
+                   const testUTC = new Date(startUTC.getTime() + i * 60 * 60 * 1000);
+                   const testLocalStr = testUTC.toLocaleString("en-US", { timeZone: userTimezone });
+                   const testTimeStr = testUTC.toLocaleString("en-US", { timeZone: userTimezone, hour12: false, hour: '2-digit', minute: '2-digit' });
+                   if (new Date(testLocalStr).toDateString() === todayString && testTimeStr === quest.localTime) {
+                      updates.deadline = testUTC.toISOString();
+                      break;
+                   }
+                }
+              }
+              await questDoc.ref.update(updates);
+            }
+          }
+        }
+
         const questsSnap = await userDoc.ref.collection("quests")
           .where("status", "==", "active")
           .get();

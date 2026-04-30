@@ -106,6 +106,7 @@ export default function EditQuestDialog({ quest, open, onOpenChange }: EditQuest
         type,
         recurringDays: type === QuestType.DAILY ? recurringDays : [],
         deadline: deadline ? new Date(deadline).toISOString() : null,
+        localTime: deadline ? deadline.split("T")[1] : null,
         notifyAdvance: deadline ? parseInt(notifyAdvance) : null,
         notified: false,
         updatedAt: new Date().toISOString(),

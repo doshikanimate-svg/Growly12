@@ -137,61 +137,65 @@ export default function Dashboard() {
     }());
   };
 
+  const applyProfileData = async (raw: Partial<UserProfile>) => {
+    if (!auth.currentUser) return;
+    const docRef = doc(db, "users", auth.currentUser.uid);
+    const normalizedProfile: UserProfile = {
+      id: raw.id || auth.currentUser.uid,
+      displayName: raw.displayName || auth.currentUser.displayName || "Герой",
+      xp: typeof raw.xp === "number" ? raw.xp : 0,
+      level: typeof raw.level === "number" ? raw.level : 1,
+      streakCount: typeof raw.streakCount === "number" ? raw.streakCount : 0,
+      lastStreakUpdate: raw.lastStreakUpdate,
+      telegramId: raw.telegramId,
+      settings: {
+        timezone: raw.settings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+        notificationsEnabled: raw.settings?.notificationsEnabled ?? true,
+        notifyBeforeDeadline: raw.settings?.notifyBeforeDeadline ?? 30,
+        theme: raw.settings?.theme || "light",
+        badgeStyle: raw.settings?.badgeStyle || "none",
+        profileStyle: raw.settings?.profileStyle || "default",
+        premiumCosmeticsUnlocked: raw.settings?.premiumCosmeticsUnlocked ?? false,
+        subscriptionPlan: raw.settings?.subscriptionPlan || "free",
+        subscriptionUntil: raw.settings?.subscriptionUntil,
+      },
+      createdAt: raw.createdAt || new Date().toISOString(),
+      updatedAt: raw.updatedAt,
+    };
+
+    let updatedStreak = normalizedProfile.streakCount || 0;
+    if (normalizedProfile.lastStreakUpdate) {
+      const lastUpdate = new Date(normalizedProfile.lastStreakUpdate);
+      const now = new Date();
+      const diffInDays = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffInDays > 1) {
+        updatedStreak = 0;
+        await updateDoc(docRef, {
+          streakCount: 0,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+
+    setProfile({ ...normalizedProfile, streakCount: updatedStreak });
+    setEditName(normalizedProfile.displayName);
+    setEditTimezone(normalizedProfile.settings.timezone);
+    setEditNotifications(normalizedProfile.settings.notificationsEnabled);
+    const theme = (normalizedProfile.settings.theme || "light") as ThemeMode;
+    setEditTheme(theme);
+    setEditBadgeStyle((normalizedProfile.settings.badgeStyle || "none") as BadgeStyle);
+    setEditProfileStyle((normalizedProfile.settings.profileStyle || "default") as ProfileStyle);
+    applyTheme(theme);
+    setLoading(false);
+  };
+
   const fetchProfile = async () => {
     if (!auth.currentUser) return;
     const docRef = doc(db, "users", auth.currentUser.uid);
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
-      const raw = docSnap.data() as Partial<UserProfile>;
-      const normalizedProfile: UserProfile = {
-        id: raw.id || auth.currentUser.uid,
-        displayName: raw.displayName || auth.currentUser.displayName || "Герой",
-        xp: typeof raw.xp === "number" ? raw.xp : 0,
-        level: typeof raw.level === "number" ? raw.level : 1,
-        streakCount: typeof raw.streakCount === "number" ? raw.streakCount : 0,
-        lastStreakUpdate: raw.lastStreakUpdate,
-        telegramId: raw.telegramId,
-        settings: {
-          timezone: raw.settings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-          notificationsEnabled: raw.settings?.notificationsEnabled ?? true,
-          notifyBeforeDeadline: raw.settings?.notifyBeforeDeadline ?? 30,
-          theme: raw.settings?.theme || "light",
-          badgeStyle: raw.settings?.badgeStyle || "none",
-          profileStyle: raw.settings?.profileStyle || "default",
-          premiumCosmeticsUnlocked: raw.settings?.premiumCosmeticsUnlocked ?? false,
-          subscriptionPlan: raw.settings?.subscriptionPlan || "free",
-          subscriptionUntil: raw.settings?.subscriptionUntil,
-        },
-        createdAt: raw.createdAt || new Date().toISOString(),
-        updatedAt: raw.updatedAt,
-      };
-
-      // Check for streak reset on load
-      let updatedStreak = normalizedProfile.streakCount || 0;
-      if (normalizedProfile.lastStreakUpdate) {
-        const lastUpdate = new Date(normalizedProfile.lastStreakUpdate);
-        const now = new Date();
-        const diffInDays = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
-        
-        if (diffInDays > 1) {
-          updatedStreak = 0;
-          await updateDoc(docRef, { 
-            streakCount: 0,
-            updatedAt: new Date().toISOString()
-          });
-        }
-      }
-
-      setProfile({ ...normalizedProfile, streakCount: updatedStreak });
-      setEditName(normalizedProfile.displayName);
-      setEditTimezone(normalizedProfile.settings.timezone);
-      setEditNotifications(normalizedProfile.settings.notificationsEnabled);
-      const theme = (normalizedProfile.settings.theme || "light") as ThemeMode;
-      setEditTheme(theme);
-      setEditBadgeStyle((normalizedProfile.settings.badgeStyle || "none") as BadgeStyle);
-      setEditProfileStyle((normalizedProfile.settings.profileStyle || "default") as ProfileStyle);
-      applyTheme(theme);
+      await applyProfileData(docSnap.data() as Partial<UserProfile>);
     } else {
       const newProfile: UserProfile = {
         id: auth.currentUser.uid,
@@ -211,13 +215,7 @@ export default function Dashboard() {
         streakCount: 0,
       };
       await setDoc(docRef, newProfile);
-      setProfile(newProfile);
-      setEditName(newProfile.displayName);
-      setEditTimezone(newProfile.settings.timezone);
-      setEditTheme("light");
-      setEditBadgeStyle("none");
-      setEditProfileStyle("default");
-      applyTheme("light");
+      await applyProfileData(newProfile);
     }
   };
 
@@ -233,6 +231,16 @@ export default function Dashboard() {
     if (!auth.currentUser) return;
     fetchProfile().catch((error) => {
       handleFirestoreError(error, OperationType.GET, `users/${auth.currentUser?.uid}`);
+      setLoading(false);
+    });
+
+    const userRef = doc(db, "users", auth.currentUser.uid);
+    const unsubscribeUser = onSnapshot(userRef, (snapshot) => {
+      if (snapshot.exists()) {
+        applyProfileData(snapshot.data() as Partial<UserProfile>).catch(() => null);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `users/${auth.currentUser.uid}`);
       setLoading(false);
     });
 
@@ -259,6 +267,7 @@ export default function Dashboard() {
     });
 
     return () => {
+      unsubscribeUser();
       unsubscribeQuests();
       unsubscribeHistory();
     };
@@ -542,9 +551,9 @@ export default function Dashboard() {
   const subscriptionActive = !!subscriptionUntil && new Date(subscriptionUntil) > new Date();
   const isAdmin = !!profile?.telegramId && (import.meta.env.VITE_ADMIN_TELEGRAM_IDS || "").split(",").map((s: string) => s.trim()).includes(String(profile.telegramId));
   const planLabelMap = {
-    month: "1 месяц",
-    half_year: "6 месяцев",
-    year: "12 месяцев",
+    month: "1 месяц — 149 ₽",
+    half_year: "6 месяцев — 699 ₽",
+    year: "12 месяцев — 999 ₽",
   } as const;
 
   const badgeView: Record<Exclude<BadgeStyle, "none">, { label: string; className: string }> = {

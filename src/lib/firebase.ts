@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, User, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer, getDoc, setDoc } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { useEffect, useState } from 'react';
 import { TelegramWebAppUser } from './telegram';
@@ -20,6 +20,16 @@ export async function linkTelegramToCurrentUser(telegramUser: TelegramWebAppUser
 
   const userRef = doc(db, "users", auth.currentUser.uid);
   const nowIso = new Date().toISOString();
+  const userSnap = await getDoc(userRef);
+
+  if (userSnap.exists()) {
+    await setDoc(userRef, {
+      telegramId: String(telegramUser.id),
+      updatedAt: nowIso,
+    }, { merge: true });
+    return;
+  }
+
   await setDoc(userRef, {
     id: auth.currentUser.uid,
     displayName: auth.currentUser.displayName || telegramUser.username || telegramUser.first_name || "Герой",
@@ -39,7 +49,7 @@ export async function linkTelegramToCurrentUser(telegramUser: TelegramWebAppUser
       subscriptionPlan: "free",
     },
     updatedAt: nowIso,
-  }, { merge: true });
+  });
 }
 
 export function useAuth() {

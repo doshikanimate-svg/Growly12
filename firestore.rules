@@ -48,7 +48,7 @@ service cloud.firestore {
         (incoming().diff(existing()).affectedKeys().hasAny(['xp', 'level', 'streakCount', 'lastStreakUpdate', 'updatedAt']) && 
          incoming().diff(existing()).affectedKeys().hasOnly(['xp', 'level', 'streakCount', 'lastStreakUpdate', 'updatedAt']))
         // Action: Settings
-        || (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'settings', 'updatedAt']))
+        || (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'settings', 'telegramId', 'updatedAt']))
         // Action: Reset Streak
         || (incoming().diff(existing()).affectedKeys().hasOnly(['streakCount', 'updatedAt']))
       );

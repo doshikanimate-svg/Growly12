@@ -167,9 +167,6 @@ export default function Dashboard() {
         updatedAt: raw.updatedAt,
       };
 
-      // Backfill missing profile fields so UI is complete before any user activity.
-      await setDoc(docRef, normalizedProfile, { merge: true });
-      
       // Check for streak reset on load
       let updatedStreak = normalizedProfile.streakCount || 0;
       if (normalizedProfile.lastStreakUpdate) {

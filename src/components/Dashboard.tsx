@@ -492,21 +492,26 @@ export default function Dashboard() {
           ? "glass"
           : editProfileStyle;
 
+      console.log("[Settings] Attempting to save...", { displayName: editName, settings: profile.settings });
       const userRef = doc(db, "users", auth.currentUser.uid);
+      
+      const newSettings = {
+        ...profile.settings,
+        timezone: editTimezone,
+        notificationsEnabled: editNotifications,
+        theme: editTheme,
+        badgeStyle: safeBadgeStyle,
+        profileStyle: safeProfileStyle,
+        soundPack: editSoundPack,
+      };
+
       await updateDoc(userRef, {
         displayName: editName,
         telegramId: editTelegramId.trim() || null,
-        settings: {
-          ...profile.settings,
-          timezone: editTimezone,
-          notificationsEnabled: editNotifications,
-          theme: editTheme,
-          badgeStyle: safeBadgeStyle,
-          profileStyle: safeProfileStyle,
-          soundPack: editSoundPack,
-        },
+        settings: newSettings,
         updatedAt: new Date().toISOString()
       });
+      console.log("[Settings] UpdateDoc successful");
       localStorage.setItem("growlyTheme", editTheme);
       applyTheme(editTheme);
       toast.success("Настройки сохранены!");
@@ -527,6 +532,8 @@ export default function Dashboard() {
       setEditBadgeStyle(safeBadgeStyle);
       setEditProfileStyle(safeProfileStyle);
     } catch (error) {
+      console.error("[Settings] Save failed:", error);
+      toast.error(`Ошибка сохранения: ${error instanceof Error ? error.message : "Неизвестная ошибка"}`);
       handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
     }
   };

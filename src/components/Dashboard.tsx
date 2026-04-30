@@ -202,12 +202,12 @@ export default function Dashboard() {
            await updateDoc(docRef, {
              "settings.freezesUsedThisMonth": freezesUsed,
              "settings.lastFreezeMonth": currentMonthStr,
-             lastStreakUpdate: yesterday.toISOString(),
+             lastStreakUpdate: now.toISOString(),
              updatedAt: now.toISOString()
            });
            normalizedProfile.settings.freezesUsedThisMonth = freezesUsed;
            normalizedProfile.settings.lastFreezeMonth = currentMonthStr;
-           normalizedProfile.lastStreakUpdate = yesterday.toISOString();
+           normalizedProfile.lastStreakUpdate = now.toISOString();
            toast.success(`Стрик спасен! Заморозок: ${freezesUsed}/5 в этом месяце.`, { icon: "❄️" });
         } else {
            const lostStreak = updatedStreak;

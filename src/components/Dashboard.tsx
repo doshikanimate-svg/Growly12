@@ -492,23 +492,29 @@ export default function Dashboard() {
           ? "glass"
           : editProfileStyle;
 
-      console.log("[Settings] Attempting to save...", { displayName: editName, settings: profile.settings });
+      const cleanSettings: any = { ...profile.settings };
+      // Explicitly update fields from the form
+      cleanSettings.timezone = editTimezone;
+      cleanSettings.notificationsEnabled = editNotifications;
+      cleanSettings.theme = editTheme;
+      cleanSettings.badgeStyle = safeBadgeStyle;
+      cleanSettings.profileStyle = safeProfileStyle;
+      cleanSettings.soundPack = editSoundPack;
+
+      // Remove undefined values to avoid Firestore error
+      Object.keys(cleanSettings).forEach(key => {
+        if (cleanSettings[key] === undefined) {
+          delete cleanSettings[key];
+        }
+      });
+
+      console.log("[Settings] Attempting to save...", { displayName: editName, settings: cleanSettings });
       const userRef = doc(db, "users", auth.currentUser.uid);
       
-      const newSettings = {
-        ...profile.settings,
-        timezone: editTimezone,
-        notificationsEnabled: editNotifications,
-        theme: editTheme,
-        badgeStyle: safeBadgeStyle,
-        profileStyle: safeProfileStyle,
-        soundPack: editSoundPack,
-      };
-
       await updateDoc(userRef, {
         displayName: editName,
         telegramId: editTelegramId.trim() || null,
-        settings: newSettings,
+        settings: cleanSettings,
         updatedAt: new Date().toISOString()
       });
       console.log("[Settings] UpdateDoc successful");

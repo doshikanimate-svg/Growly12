@@ -58,7 +58,14 @@ export default function CreateQuestDialog({
   const [showRichEditor, setShowRichEditor] = useState(false);
 
   useEffect(() => {
-    if (initialDeadline) setDeadline(initialDeadline);
+    if (initialDeadline) {
+      const d = new Date(initialDeadline);
+      if (!isNaN(d.getTime())) {
+        setDeadline(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+      } else {
+        setDeadline(initialDeadline);
+      }
+    }
   }, [initialDeadline]);
 
   const toggleDay = (day: number) => {
@@ -89,7 +96,7 @@ export default function CreateQuestDialog({
       type,
       status: QuestStatus.ACTIVE,
       recurringDays: type === QuestType.DAILY ? recurringDays : [],
-      deadline: deadline || null,
+      deadline: deadline ? new Date(deadline).toISOString() : null,
       notifyAdvance: deadline ? parseInt(notifyAdvance) : null,
       notified: false,
       category: "Personal",

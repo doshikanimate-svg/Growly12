@@ -70,7 +70,12 @@ export default function EditQuestDialog({ quest, open, onOpenChange }: EditQuest
       setXpReward(quest.xpReward.toString());
       setType(quest.type);
       setRecurringDays(quest.recurringDays || []);
-      setDeadline(quest.deadline || "");
+      if (quest.deadline) {
+        const d = new Date(quest.deadline);
+        setDeadline(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+      } else {
+        setDeadline("");
+      }
       setNotifyAdvance((quest.notifyAdvance || 30).toString());
     }
   }, [quest]);
@@ -100,7 +105,7 @@ export default function EditQuestDialog({ quest, open, onOpenChange }: EditQuest
         xpReward: parseInt(xpReward),
         type,
         recurringDays: type === QuestType.DAILY ? recurringDays : [],
-        deadline: deadline || null,
+        deadline: deadline ? new Date(deadline).toISOString() : null,
         notifyAdvance: deadline ? parseInt(notifyAdvance) : null,
         notified: false,
         updatedAt: new Date().toISOString(),

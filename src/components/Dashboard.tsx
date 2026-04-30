@@ -213,9 +213,11 @@ export default function Dashboard() {
            const lostStreak = updatedStreak;
            updatedStreak = 0;
            normalizedProfile.streakCount = 0;
+           normalizedProfile.lastStreakUpdate = now.toISOString(); // prevent re-trigger
            
            const updates: any = {
              streakCount: 0,
+             lastStreakUpdate: now.toISOString(), // IMPORTANT: break the onSnapshot loop
              updatedAt: now.toISOString()
            };
            
@@ -225,6 +227,10 @@ export default function Dashboard() {
            }
            
            await updateDoc(docRef, updates);
+           
+           if (!isPro && lostStreak > 0) {
+             setShowLostStreakModal(true);
+           }
         }
       }
 

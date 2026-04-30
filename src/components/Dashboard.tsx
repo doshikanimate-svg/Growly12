@@ -89,6 +89,7 @@ export default function Dashboard() {
   const [adminLoading, setAdminLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
   const [showLostStreakModal, setShowLostStreakModal] = useState(false);
+  const [activeTab, setActiveTab] = useState("quests");
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const handleDismissLostStreak = async () => {
@@ -738,7 +739,11 @@ export default function Dashboard() {
 
   return (
     <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
-      <Tabs defaultValue="quests" className="flex-1 flex flex-col overflow-hidden">
+      <Tabs 
+        value={activeTab} 
+        onValueChange={setActiveTab} 
+        className="flex-1 flex flex-col overflow-hidden"
+      >
         {/* Fixed Top Header */}
         <header className={`w-full text-white pt-6 pb-8 px-4 rounded-b-[2.5rem] shadow-xl relative z-20 shrink-0 ${profileHeaderStyleClass}`}>
           <div className="max-w-2xl mx-auto space-y-6">
@@ -1142,7 +1147,7 @@ export default function Dashboard() {
             </Button>
             <Button onClick={() => {
               setShowLostStreakModal(false);
-              setTab("settings");
+              setActiveTab("settings");
             }} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl w-full sm:w-auto shadow-lg shadow-emerald-200">
               Перейти к подписке
             </Button>

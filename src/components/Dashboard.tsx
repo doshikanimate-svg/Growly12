@@ -53,8 +53,8 @@ const COMPLETION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2013/2
 const SOUND_PACKS: Record<string, string> = {
   default: COMPLETION_SOUND_URL,
   mario: "https://www.myinstants.com/media/sounds/mario-coin.mp3",
-  zelda: "https://www.myinstants.com/media/sounds/zelda-secret.mp3",
-  gta: "https://www.myinstants.com/media/sounds/gta-san-andreas-mission-passed.mp3"
+  zelda: "https://raw.githubusercontent.com/citedy/game-sounds/main/sounds/zelda/task-complete/secret-discovered.mp3",
+  gta: "https://raw.githubusercontent.com/citedy/game-sounds/main/sounds/gta/task-complete/mission-passed.mp3"
 };
 
 export default function Dashboard() {
@@ -99,6 +99,7 @@ export default function Dashboard() {
   const [showBenefitsModal, setShowBenefitsModal] = useState(false);
   const [activeTab, setActiveTab] = useState("quests");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCache = useRef<Record<string, HTMLAudioElement>>({});
 
 
   const handleDismissLostStreak = async () => {
@@ -124,12 +125,22 @@ export default function Dashboard() {
 
   useEffect(() => {
     audioRef.current = new Audio(COMPLETION_SOUND_URL);
+    
+    // Preload all sound packs to eliminate delay
+    Object.entries(SOUND_PACKS).forEach(([key, url]) => {
+      const audio = new Audio(url);
+      audio.preload = "auto";
+      audioCache.current[key] = audio;
+    });
   }, []);
 
   const playSuccessSound = () => {
     const soundPack = profile?.settings?.soundPack || "default";
-    const audio = new Audio(SOUND_PACKS[soundPack] || COMPLETION_SOUND_URL);
-    audio.play().catch(e => console.log("Audio play failed:", e));
+    const audio = audioCache.current[soundPack] || audioCache.current["default"];
+    if (audio) {
+      audio.currentTime = 0; // Reset to start for instant replay
+      audio.play().catch(e => console.log("Audio play failed:", e));
+    }
   };
 
   const triggerConfetti = () => {
